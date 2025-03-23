@@ -888,13 +888,13 @@ elif page == "Prediction":
                                         metrics = result['performance_metrics']
                                         row = {
                                             'Model': model_name.replace('_', ' ').title(),
-                                            'Accuracy': f"{metrics['accuracy']:.4f}",
-                                            'Precision': f"{metrics['precision']:.4f}",
-                                            'Recall': f"{metrics['recall']:.4f}",
-                                            'F1 Score': f"{metrics['f1']:.4f}"
+                                            'Accuracy': f"{metrics.get('accuracy', 0):.4f}",
+                                            'Precision': f"{metrics.get('precision', 0):.4f}",
+                                            'Recall': f"{metrics.get('recall', 0):.4f}",
+                                            'F1 Score': f"{metrics.get('f1', 0):.4f}"
                                         }
                                         if metrics.get('auc') is not None:
-                                            row['AUC'] = f"{metrics['auc']:.4f}"
+                                            row['AUC'] = f"{metrics.get('auc', 0):.4f}"
                                         perf_data.append(row)
                                 
                                 # Also add metrics from evaluation results if available
