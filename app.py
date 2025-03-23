@@ -776,6 +776,105 @@ elif page == "Prediction":
                                     perf_df = pd.DataFrame(perf_data)
                                     st.table(perf_df)
                                     
+                                    # Add interactive model performance comparison slider
+                                    st.subheader("Interactive Model Performance Comparison")
+                                    
+                                    if len(perf_data) > 1:  # Only show comparison if we have multiple models
+                                        # Convert string metrics to float for comparison
+                                        numeric_df = perf_df.copy()
+                                        for col in numeric_df.columns:
+                                            if col != 'Model':
+                                                try:
+                                                    numeric_df[col] = numeric_df[col].astype(float)
+                                                except:
+                                                    pass  # Skip if can't convert
+                                        
+                                        # Get available metrics (excluding the Model column)
+                                        available_metrics = [col for col in numeric_df.columns if col != 'Model']
+                                        
+                                        if available_metrics:
+                                            # Let user select which metric to compare
+                                            selected_metric = st.selectbox(
+                                                "Select metric to compare across models:",
+                                                options=available_metrics,
+                                                index=0  # Default to first metric (likely accuracy)
+                                            )
+                                            
+                                            # Create a slider to set the threshold for the selected metric
+                                            threshold = st.slider(
+                                                f"Set minimum threshold for {selected_metric}",
+                                                min_value=0.0,
+                                                max_value=1.0,
+                                                value=0.7,  # Default threshold
+                                                step=0.01
+                                            )
+                                            
+                                            # Filter models that meet the threshold
+                                            models_above_threshold = numeric_df[numeric_df[selected_metric] >= threshold]
+                                            models_below_threshold = numeric_df[numeric_df[selected_metric] < threshold]
+                                            
+                                            # Display results
+                                            col1, col2 = st.columns(2)
+                                            
+                                            with col1:
+                                                st.markdown(f"### Models Above {selected_metric} = {threshold:.2f}")
+                                                if not models_above_threshold.empty:
+                                                    st.dataframe(models_above_threshold[['Model', selected_metric]])
+                                                else:
+                                                    st.info(f"No models meet the {selected_metric} threshold of {threshold:.2f}")
+                                            
+                                            with col2:
+                                                st.markdown(f"### Models Below {selected_metric} = {threshold:.2f}")
+                                                if not models_below_threshold.empty:
+                                                    st.dataframe(models_below_threshold[['Model', selected_metric]])
+                                                else:
+                                                    st.success(f"All models meet the {selected_metric} threshold of {threshold:.2f}")
+                                            
+                                            # Create a horizontal bar chart comparing models on the selected metric
+                                            chart_data = numeric_df.sort_values(by=selected_metric, ascending=True)
+                                            
+                                            # Assign colors based on threshold
+                                            colors = ['green' if val >= threshold else 'red' for val in chart_data[selected_metric]]
+                                            
+                                            fig, ax = plt.subplots(figsize=(10, 5))
+                                            bars = ax.barh(chart_data['Model'], chart_data[selected_metric], color=colors)
+                                            
+                                            # Add a line for the threshold
+                                            ax.axvline(x=threshold, color='black', linestyle='--', alpha=0.7)
+                                            ax.text(threshold, ax.get_ylim()[1]*0.9, f'Threshold: {threshold:.2f}', 
+                                                    verticalalignment='top', horizontalalignment='center',
+                                                    bbox=dict(facecolor='white', alpha=0.8))
+                                            
+                                            # Add values at the end of each bar
+                                            for i, bar in enumerate(bars):
+                                                ax.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2, 
+                                                        f'{chart_data[selected_metric].iloc[i]:.4f}',
+                                                        va='center')
+                                            
+                                            plt.title(f'{selected_metric} Comparison Across Models')
+                                            plt.xlabel(selected_metric)
+                                            plt.ylabel('Model')
+                                            plt.xlim(0, 1.1)  # Set x-axis from 0 to slightly above 1
+                                            plt.tight_layout()
+                                            
+                                            st.pyplot(fig)
+                                            
+                                            # Add an explanation about comparing metrics
+                                            with st.expander("About Metric Comparison"):
+                                                st.markdown(f"""
+                                                **Understanding {selected_metric} Comparison:**
+                                                
+                                                - **Green bars** represent models that meet or exceed your threshold of {threshold:.2f}
+                                                - **Red bars** represent models that fall below your threshold
+                                                - Use the slider to adjust the threshold and see which models qualify
+                                                - Higher {selected_metric} generally indicates better model performance, but always consider your specific use case
+                                                
+                                                When comparing models, it's important to look at multiple metrics, not just {selected_metric}. 
+                                                Some models might excel in one metric but perform poorly in others.
+                                                """)
+                                    else:
+                                        st.info("Multiple models required for comparison. Train and evaluate at least two different models.")
+                                    
                                     # Add explanation of metrics
                                     with st.expander("Understanding Performance Metrics"):
                                         st.markdown("""

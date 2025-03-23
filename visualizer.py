@@ -131,7 +131,19 @@ def plot_metrics_over_time(data, time_series_model_dict):
             
         # Prepare the data
         historical_data = data.set_index('timestamp')[feature]
-    
+        
+        # Create forecast timestamps (daily intervals from last timestamp)
+    except Exception as e:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error processing time series data: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False
+        )
+        fig.update_layout(title="Time Series Processing Error")
+        return fig
+        
     # Create forecast timestamps (daily intervals from last timestamp)
     forecast_idx = pd.date_range(
         start=last_timestamp,
