@@ -141,3 +141,64 @@ def calculate_metrics_summary(predictions, actual=None):
         summary['f1'] = f1_score(actual, predictions, zero_division=0)
     
     return summary
+
+def format_prediction_result(model_name, prediction_data, error=None):
+    """
+    Create a standardized prediction result object for consistent UI display.
+    
+    Parameters:
+    -----------
+    model_name : str
+        Name of the model making the prediction
+    prediction_data : dict or any
+        Raw prediction data from the model
+    error : str or None
+        Error message if prediction failed
+    
+    Returns:
+    --------
+    dict
+        Standardized prediction result object
+    """
+    result = {
+        'model': model_name.replace('_', ' ').title(),
+        'timestamp': datetime.now().isoformat(),
+        'status': 'error' if error else 'success'
+    }
+    
+    if error:
+        result['error'] = str(error)
+        result['prediction'] = None
+    else:
+        result.update(prediction_data)
+    
+    return result
+
+def handle_prediction_errors(func):
+    """
+    Decorator for handling prediction function errors
+    
+    Parameters:
+    -----------
+    func : function
+        The prediction function to wrap
+    
+    Returns:
+    --------
+    function
+        Wrapped function with error handling
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            import traceback
+            error_details = {
+                'error': str(e),
+                'traceback': traceback.format_exc(),
+                'status': 'error'
+            }
+            st.error(f"Prediction error: {str(e)}")
+            return error_details
+    
+    return wrapper

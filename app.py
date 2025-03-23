@@ -618,38 +618,47 @@ elif page == "Prediction":
 
                             with tab1:
                                 table_data = []
-
-                            for model_name, result in results['predictions'].items():
-                                if result['status'] == 'error':
-                                    row = {
-                                        'Model': model_name.replace('_', ' ').title(),
-                                        'Status': '❌ Error',
-                                        'Details': result['error_message']
-                                    }
-                                else:
-                                    row = {
-                                        'Model': model_name.replace('_', ' ').title(),
-                                        'Status': '✅ Success',
-                                        'Prediction': result['prediction']
-                                    }
-                                    if 'probability_formatted' in result:
-                                        row['Probability'] = result['probability_formatted']
-                                        row['Confidence'] = result['confidence_level']
-                                    if 'anomaly_score_formatted' in result:
-                                        row['Anomaly Score'] = result['anomaly_score_formatted']
-                                        row['Severity'] = result['severity']
-                                table_data.append(row)
-
-                                    # Display visual indicators
+                                
+                                # Process all model predictions for the table
+                                for model_name, result in results['predictions'].items():
+                                    if result['status'] == 'error':
+                                        row = {
+                                            'Model': model_name.replace('_', ' ').title(),
+                                            'Status': '❌ Error',
+                                            'Details': result['error_message']
+                                        }
+                                    else:
+                                        row = {
+                                            'Model': model_name.replace('_', ' ').title(),
+                                            'Status': '✅ Success',
+                                            'Prediction': result['prediction']
+                                        }
+                                        if 'probability_formatted' in result:
+                                            row['Probability'] = result['probability_formatted']
+                                            row['Confidence'] = result['confidence_level']
+                                        if 'anomaly_score_formatted' in result:
+                                            row['Anomaly Score'] = result['anomaly_score_formatted']
+                                            row['Severity'] = result['severity']
+                                    table_data.append(row)
+                                
+                                # Display the summary table
+                                if table_data:
+                                    results_df = pd.DataFrame(table_data)
+                                    st.table(results_df)  # Using st.table for fixed-width display
+                                
+                                # Show visual indicators for each model
+                                st.markdown("### Prediction Details")
+                                for model_name, result in results['predictions'].items():
                                     if result['status'] == 'success':
+                                        st.markdown(f"**{model_name.replace('_', ' ').title()}**")
                                         col1, col2 = st.columns(2)
                                         with col1:
                                             prediction = result['prediction']
                                             if prediction in ['Failure', 'Anomaly']:
-                                                st.error(f"⚠️ {model_name}: {prediction} Detected")
+                                                st.error(f"⚠️ {prediction} Detected")
                                             else:
-                                                st.success(f"✅ {model_name}: System Normal")
-
+                                                st.success(f"✅ System Normal")
+                                        
                                         with col2:
                                             if 'probability_formatted' in result:
                                                 st.metric("Failure Probability", 
@@ -659,12 +668,7 @@ elif page == "Prediction":
                                                 st.metric("Anomaly Score", 
                                                          result['anomaly_score_formatted'],
                                                          help=f"Severity: {result['severity']}")
-
-                        # Convert to DataFrame and display as table
-                                if table_data:
-                                    results_df = pd.DataFrame(table_data)
-                                    st.table(results_df)  # Using st.table for fixed-width display
-
+                            
                             with tab2:
                                 # Show raw JSON data in an expandable container
                                 with st.expander("Raw Prediction Data", expanded=True):
