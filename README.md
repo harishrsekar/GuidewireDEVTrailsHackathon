@@ -189,6 +189,66 @@ streamlit run app.py
 - Run predictions to identify potential failures
 - Review prediction results and detailed explanations
 
+## Input Parameters and Attributes
+
+The application uses the following Kubernetes metrics as input parameters for prediction models:
+
+### Node-level Metrics
+1. **CPU Usage** (`cpu_usage_percent`) - Percentage of CPU utilization on the node
+2. **Memory Usage** (`memory_usage_percent`) - Percentage of memory usage on the node
+3. **Disk Usage** (`disk_usage_percent`) - Percentage of disk space utilized
+4. **Network Activity**:
+   - `network_receive_bytes` - Bytes received over the network
+   - `network_transmit_bytes` - Bytes transmitted over the network
+
+### Pod-related Metrics
+1. **Pod Count** (`pod_count`) - Number of pods running on the node
+2. **Pod Restart Count** (`pod_restart_count`) - Number of pod restarts
+3. **Pod Pending Count** (`pod_pending_count`) - Number of pods pending scheduling
+
+### Node Condition Indicators
+1. **Node Ready Status** (`node_condition_ready`) - 1 if ready, 0 if not ready
+2. **Memory Pressure** (`node_condition_memory_pressure`) - 1 if true, 0 if false
+3. **Disk Pressure** (`node_condition_disk_pressure`) - 1 if true, 0 if false
+4. **PID Pressure** (`node_condition_pid_pressure`) - 1 if true, 0 if false
+5. **Network Unavailable** (`node_condition_network_unavailable`) - 1 if true, 0 if false
+
+### Resource Quota Metrics
+1. **CPU Request Percentage** (`cpu_request_percentage`) - Percentage of CPU resources requested
+2. **Memory Request Percentage** (`memory_request_percentage`) - Percentage of memory resources requested
+
+### Failure Patterns Detected
+
+The models are trained to identify several types of failure patterns:
+
+1. **CPU Exhaustion** - Characterized by:
+   - High CPU usage (>85%)
+   - Increased pod restart counts
+
+2. **Memory Exhaustion** - Characterized by:
+   - High memory usage (>90%)
+   - Memory pressure condition
+
+3. **Disk Pressure** - Characterized by:
+   - High disk usage (>85%)
+   - Disk pressure condition
+
+4. **Network Issues** - Characterized by:
+   - Abnormally low network throughput
+   - Network unavailable condition
+
+5. **Node Not Ready** - Characterized by:
+   - Node condition ready = 0
+   - Increased pending pod count
+
+These input parameters are processed through feature engineering steps that create additional derived metrics, such as:
+- Rolling averages over different time windows
+- Rate of change calculations
+- Statistical features (variance, skewness, etc.)
+- Anomaly scores
+
+![Image here]
+
 ## Extending the Application
 
 The application can be extended in several ways:
