@@ -107,11 +107,27 @@ def plot_metrics_over_time(data, time_series_model_dict):
     plotly.graph_objects.Figure
         Interactive plot
     """
-    # Extract model information
-    model = time_series_model_dict['model']
-    forecast = time_series_model_dict['forecast']
-    feature = time_series_model_dict['feature']
-    last_timestamp = time_series_model_dict['last_timestamp']
+    # Check if we have an error in the model dictionary
+    if 'error' in time_series_model_dict:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error: {time_series_model_dict['error']}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False
+        )
+        fig.update_layout(title="Time Series Model Error")
+        return fig
+
+    # Extract model information with error handling
+    try:
+        model = time_series_model_dict.get('model')
+        forecast = time_series_model_dict.get('forecast')
+        feature = time_series_model_dict.get('feature')
+        last_timestamp = time_series_model_dict.get('last_timestamp')
+        
+        if not all([model, forecast, feature, last_timestamp]):
+            raise KeyError("Missing required time series model components")
     
     # Prepare the data
     historical_data = data.set_index('timestamp')[feature]
