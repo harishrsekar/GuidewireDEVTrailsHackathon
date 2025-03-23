@@ -307,9 +307,21 @@ elif page == "Model Evaluation":
                     for key, value in evaluation_results.items():
                         if key in ['accuracy', 'precision', 'recall', 'f1', 'auc']:
                             display_metrics[key] = value
+                    
+                    # Import the performance matrix visualization
+                    from visualizer import create_classification_performance_matrix
+                    
+                    # Create and display the performance matrix for this model
+                    if model_to_evaluate != 'time_series':
+                        st.write("### Performance Matrix")
+                        perf_fig = create_classification_performance_matrix(
+                            display_metrics, 
+                            model_name=model_to_evaluate.replace('_', ' ').title()
+                        )
+                        st.plotly_chart(perf_fig)
 
                     # Create a more user-friendly metrics display with color-coded performance indicators
-                    st.write("### Key Performance Metrics")
+                    st.write("### Detailed Performance Metrics")
 
                     # Display metrics in a table format first
                     metrics_table = pd.DataFrame({
@@ -525,6 +537,27 @@ elif page == "Model Evaluation":
                     }
 
             if comparison_data:
+                # Display performance matrices for all models side by side
+                st.write("### Performance Matrices Comparison")
+                
+                # Create columns for each model's performance matrix
+                cols = st.columns(len(comparison_data))
+                
+                # Import visualization function
+                from visualizer import create_classification_performance_matrix
+                
+                # Display performance matrix for each model in a column
+                for i, (model_name, metrics) in enumerate(comparison_data.items()):
+                    with cols[i]:
+                        st.subheader(f"{model_name.replace('_', ' ').title()}")
+                        perf_fig = create_classification_performance_matrix(
+                            metrics, 
+                            model_name=model_name.replace('_', ' ').title()
+                        )
+                        st.plotly_chart(perf_fig)
+                
+                # Display traditional metrics table
+                st.subheader("Metric Comparison Table")
                 comparison_df = pd.DataFrame(comparison_data)
                 st.dataframe(comparison_df)
 
