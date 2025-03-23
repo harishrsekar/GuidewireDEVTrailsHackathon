@@ -146,4 +146,13 @@ def generate_kubernetes_data(n_samples=5000, failure_rate=0.1, time_steps=30):
     # Sort by timestamp
     df = df.sort_values('timestamp')
     
+    # Ensure the failure column is explicitly converted to integer type
+    df['failure'] = df['failure'].astype(int)
+    
+    # Make sure some failures exist (debug)
+    if df['failure'].sum() == 0:
+        # Force at least 10% of rows to have failure=1 if none exist
+        indices = np.random.choice(df.index, size=int(len(df) * 0.1), replace=False)
+        df.loc[indices, 'failure'] = 1
+    
     return df

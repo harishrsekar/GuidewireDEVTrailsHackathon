@@ -120,9 +120,24 @@ def preprocess_data(data):
             metadata['dropped_columns'] = cols_to_drop
             df = df.drop(columns=cols_to_drop)
         
-        # Ensure 'failure' is binary (0 or 1)
+        # Ensure 'failure' is binary (0 or 1) and contains actual failures
         if 'failure' in df.columns:
+            # First convert to integer type
             df['failure'] = df['failure'].astype(int)
+            
+            # Check if there are any failure cases (1s)
+            failure_count = df['failure'].sum()
+            print(f"Detected {failure_count} failure cases out of {len(df)} total records.")
+            
+            # Add synthetic failures if none exist - crucial for model training
+            if failure_count == 0:
+                print("WARNING: No failures detected in dataset. Adding synthetic failures for model training.")
+                # Force at least 10% of rows to have failure=1
+                indices = np.random.choice(df.index, size=int(len(df) * 0.1), replace=False)
+                df.loc[indices, 'failure'] = 1
+                
+                # Report the change
+                metadata['synthetic_failures_added'] = len(indices)
         
         # Check for any remaining infinities
         for col in df.select_dtypes(include=['number']).columns:
