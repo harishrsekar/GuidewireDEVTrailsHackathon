@@ -637,9 +637,10 @@ elif page == "Prediction":
                                 st.json(results['metadata'])
 
                             # Create tabs for different visualization options
-                            tab1, tab2 = st.tabs(["Summary View", "Detailed View"])
+                            tab1, tab2, tab3 = st.tabs(["Summary View", "Detailed View", "Performance Metrics"])
 
                             with tab1:
+                                st.markdown("### Prediction Summary")
                                 table_data = []
                                 
                                 # Process all model predictions for the table
@@ -664,38 +665,16 @@ elif page == "Prediction":
                                         if 'anomaly_score_formatted' in result:
                                             row['Anomaly Score'] = result['anomaly_score_formatted']
                                             row['Severity'] = result['severity']
-                                            
-                                        # Add performance metrics if available
-                                        if 'performance_metrics' in result and result['performance_metrics']:
-                                            metrics = result['performance_metrics']
-                                            row['Accuracy'] = f"{metrics['accuracy']:.2%}"
-                                            row['Precision'] = f"{metrics['precision']:.2%}"
-                                            row['Recall'] = f"{metrics['recall']:.2%}"
-                                            row['F1 Score'] = f"{metrics['f1']:.2%}"
-                                            if metrics['auc'] is not None:
-                                                row['AUC'] = f"{metrics['auc']:.2%}"
+                                    
                                     table_data.append(row)
                                 
                                 # Display the summary table
                                 if table_data:
                                     results_df = pd.DataFrame(table_data)
                                     
-                                    # Add accuracy metrics from evaluation results
-                                    if st.session_state.evaluation_results:
-                                        for idx, row in results_df.iterrows():
-                                            model_name = row['Model'].lower().replace(' ', '_')
-                                            if model_name in st.session_state.evaluation_results:
-                                                results_df.at[idx, 'Model Accuracy'] = f"{st.session_state.evaluation_results[model_name]['accuracy']:.2%}"
-                                    
                                     # Reorder columns to show important info first
                                     # First the key columns
                                     cols = ['Model', 'Status', 'Prediction']
-                                    
-                                    # Then performance metrics in a logical order
-                                    perf_cols = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC', 'Model Accuracy']
-                                    for col in perf_cols:
-                                        if col in results_df.columns:
-                                            cols.append(col)
                                     
                                     # Then prediction details
                                     pred_cols = ['Probability', 'Confidence', 'Anomaly Score', 'Severity']
@@ -758,25 +737,81 @@ elif page == "Prediction":
                                             - System operating normally
                                             - Continue regular monitoring
                                             """)
+                            
+                            with tab3:
+                                st.markdown("### Model Performance Metrics")
+                                
+                                # Create a table for performance metrics
+                                perf_data = []
+                                
+                                # Add metrics from prediction results if available
+                                for model_name, result in results['predictions'].items():
+                                    if result['status'] == 'success' and 'performance_metrics' in result and result['performance_metrics']:
+                                        metrics = result['performance_metrics']
+                                        row = {
+                                            'Model': model_name.replace('_', ' ').title(),
+                                            'Accuracy': f"{metrics['accuracy']:.4f}",
+                                            'Precision': f"{metrics['precision']:.4f}",
+                                            'Recall': f"{metrics['recall']:.4f}",
+                                            'F1 Score': f"{metrics['f1']:.4f}"
+                                        }
+                                        if metrics.get('auc') is not None:
+                                            row['AUC'] = f"{metrics['auc']:.4f}"
+                                        perf_data.append(row)
+                                
+                                # Also add metrics from evaluation results if available
+                                if not perf_data and st.session_state.evaluation_results:
+                                    for model_name, eval_results in st.session_state.evaluation_results.items():
+                                        if model_name != 'time_series':
+                                            row = {'Model': model_name.replace('_', ' ').title()}
+                                            for metric in ['accuracy', 'precision', 'recall', 'f1']:
+                                                if metric in eval_results:
+                                                    row[metric.capitalize()] = f"{eval_results[metric]:.4f}"
+                                            if 'auc' in eval_results:
+                                                row['AUC'] = f"{eval_results['auc']:.4f}"
+                                            perf_data.append(row)
+                                
+                                # Display performance metrics table
+                                if perf_data:
+                                    perf_df = pd.DataFrame(perf_data)
+                                    st.table(perf_df)
+                                    
+                                    # Add explanation of metrics
+                                    with st.expander("Understanding Performance Metrics"):
+                                        st.markdown("""
+                                        **Accuracy**: Percentage of correct predictions (TP + TN) / (TP + TN + FP + FN)
+                                        
+                                        **Precision**: Proportion of positive identifications that were actually correct. TP / (TP + FP)
+                                        
+                                        **Recall**: Proportion of actual positives that were identified correctly. TP / (TP + FN)
+                                        
+                                        **F1 Score**: Harmonic mean of precision and recall. 2 * (Precision * Recall) / (Precision + Recall)
+                                        
+                                        **AUC**: Area Under the ROC Curve. Measures the ability to distinguish between classes.
+                                        
+                                        Where: TP = True Positives, TN = True Negatives, FP = False Positives, FN = False Negatives
+                                        """)
+                                    
+                                    # Add confusion matrix visualization if applicable
+                                    if ('random_forest' in st.session_state.models and 
+                                        'random_forest' in st.session_state.evaluation_results and 
+                                        'confusion_matrix' in st.session_state.evaluation_results['random_forest']):
+                                        
+                                        st.subheader("Confusion Matrix")
+                                        cm = st.session_state.evaluation_results['random_forest']['confusion_matrix']
+                                        
+                                        # Create a figure with the confusion matrix
+                                        from visualizer import plot_confusion_matrix
+                                        cm_fig = plot_confusion_matrix(
+                                            st.session_state.y_test, 
+                                            st.session_state.models['random_forest'].predict(st.session_state.X_test)
+                                        )
+                                        st.pyplot(cm_fig)
+                                        
+                                else:
+                                    st.info("No performance metrics available. Complete model evaluation to see metrics.")
 
-                        # Display model performance metrics
-                        if st.session_state.evaluation_results:
-                            st.markdown("### Model Performance Metrics")
-                            perf_metrics = ['accuracy', 'precision', 'recall', 'f1']
-
-                            # Create performance metrics table
-                            perf_data = []
-                            for model_name, eval_results in st.session_state.evaluation_results.items():
-                                if model_name != 'time_series':
-                                    row = {'Model': model_name.replace('_', ' ').title()}
-                                    for metric in perf_metrics:
-                                        if metric in eval_results:
-                                            row[metric.capitalize()] = f"{eval_results[metric]:.4f}"
-                                    perf_data.append(row)
-
-                            if perf_data:
-                                perf_df = pd.DataFrame(perf_data)
-                                st.table(perf_df)
+                        # Performance metrics are now displayed in the tabbed interface
 
                         # Visual indicators are now handled in the tabbed interface above
                 else:
