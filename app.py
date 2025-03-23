@@ -644,6 +644,19 @@ elif page == "Prediction":
                                 # Display the summary table
                                 if table_data:
                                     results_df = pd.DataFrame(table_data)
+                                    
+                                    # Add accuracy metrics from evaluation results
+                                    if st.session_state.evaluation_results:
+                                        for idx, row in results_df.iterrows():
+                                            model_name = row['Model'].lower().replace(' ', '_')
+                                            if model_name in st.session_state.evaluation_results:
+                                                results_df.at[idx, 'Model Accuracy'] = f"{st.session_state.evaluation_results[model_name]['accuracy']:.2%}"
+                                    
+                                    # Reorder columns to show important info first
+                                    cols = ['Model', 'Status', 'Prediction', 'Model Accuracy']
+                                    cols.extend([col for col in results_df.columns if col not in cols])
+                                    results_df = results_df[cols]
+                                    
                                     st.table(results_df)  # Using st.table for fixed-width display
                                 
                                 # Show visual indicators for each model
