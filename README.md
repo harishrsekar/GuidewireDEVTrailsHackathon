@@ -11,7 +11,9 @@ The application provides an end-to-end pipeline for Kubernetes cluster health mo
 3. **Model Evaluation** - Evaluate model performance with detailed metrics
 4. **Prediction** - Run predictions on new data to identify potential failures
 
-![Image here]
+## Video Demo
+
+https://github.com/user-attachments/assets/19a4fa7e-c59b-4c66-b15d-f5a9e7ac144c
 
 ## Features
 
