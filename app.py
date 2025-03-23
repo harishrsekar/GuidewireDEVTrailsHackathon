@@ -905,6 +905,9 @@ elif page == "Prediction":
                             with tab3:
                                 st.markdown("### Model Performance Metrics")
                                 
+                                # Import visualization function
+                                from visualizer import create_classification_performance_matrix
+                                
                                 # Create a table for performance metrics
                                 perf_data = []
                                 
@@ -912,6 +915,17 @@ elif page == "Prediction":
                                 for model_name, result in results['predictions'].items():
                                     if result['status'] == 'success' and 'performance_metrics' in result and result['performance_metrics']:
                                         metrics = result['performance_metrics']
+                                        
+                                        # Display performance matrix for classification models
+                                        if model_name != 'time_series':
+                                            st.subheader(f"{model_name.replace('_', ' ').title()} Performance Matrix")
+                                            perf_fig = create_classification_performance_matrix(
+                                                metrics, 
+                                                model_name=model_name.replace('_', ' ').title()
+                                            )
+                                            st.plotly_chart(perf_fig)
+                                        
+                                        # Create a data row for the traditional table display
                                         row = {
                                             'Model': model_name.replace('_', ' ').title(),
                                             'Accuracy': f"{metrics.get('accuracy', 0):.4f}",

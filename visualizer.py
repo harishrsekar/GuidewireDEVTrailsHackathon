@@ -411,3 +411,101 @@ def create_time_series_performance_matrix(metrics, model_name="ARIMA Time Series
     )
     
     return fig
+
+def create_classification_performance_matrix(metrics, model_name="Classification Model"):
+    """
+    Create a visual performance matrix for classification models.
+    
+    Parameters:
+    -----------
+    metrics : dict
+        Dictionary of classification performance metrics
+    model_name : str
+        Name of the model to display in the matrix
+    
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Interactive performance matrix visualization
+    """
+    if metrics is None or not metrics:
+        # Return an empty figure with error message
+        fig = go.Figure()
+        fig.update_layout(
+            title="Classification Performance Matrix",
+            annotations=[
+                dict(
+                    text="No metrics available for classification model",
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5
+                )
+            ],
+            height=250,
+            width=700
+        )
+        return fig
+    
+    # Extract metrics for display, handling potential missing metrics
+    metric_names = [
+        'Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC'
+    ]
+    
+    metric_values = [
+        round(float(metrics.get('accuracy', 0)), 3),
+        round(float(metrics.get('precision', 0)), 3),
+        round(float(metrics.get('recall', 0)), 3),
+        round(float(metrics.get('f1', 0)), 3),
+        round(float(metrics.get('auc', 0)), 3) if metrics.get('auc') is not None else None
+    ]
+    
+    # Filter out None values if AUC is not available
+    valid_metrics = [(name, val) for name, val in zip(metric_names, metric_values) if val is not None]
+    if valid_metrics:
+        metric_names, metric_values = zip(*valid_metrics)
+    
+    # Create a color scale based on typical good/bad values
+    # For classification metrics, typically higher is better
+    # These values can be tuned based on domain knowledge
+    
+    # Normalize metric values to a 0-1 scale for coloring
+    # All metrics here are on a 0-1 scale already, but we can still customize
+    # the color thresholds
+    normalized_values = []
+    for val in metric_values:
+        if val is None:
+            normalized_values.append(0.5)  # Middle value for missing metrics
+        else:
+            # For classification metrics (all), higher is better
+            # Below 0.5 is considered poor, 0.7-0.8 is good, 0.9+ is excellent
+            normalized_values.append(val)
+    
+    # Create heatmap
+    fig = go.Figure(data=go.Heatmap(
+        z=[normalized_values],
+        x=metric_names,
+        y=[model_name],
+        colorscale='RdYlGn',  # Red (bad) to Green (good)
+        showscale=False,
+        text=[[str(val) for val in metric_values]],
+        texttemplate="%{text}",
+        textfont={"size": 16}
+    ))
+    
+    # Update layout
+    fig.update_layout(
+        title={
+            'text': 'Classification Model Performance Matrix',
+            'y': 0.95,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        height=200,
+        width=700,
+        margin=dict(l=50, r=50, t=80, b=50)
+    )
+    
+    return fig
