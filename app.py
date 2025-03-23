@@ -620,25 +620,25 @@ elif page == "Prediction":
                                 table_data = []
                         
                         for model_name, result in results['predictions'].items():
-                                    if result['status'] == 'error':
-                                        row = {
-                                            'Model': model_name.replace('_', ' ').title(),
-                                            'Status': '❌ Error',
-                                            'Details': result['error_message']
-                                        }
-                                    else:
-                                        row = {
-                                            'Model': model_name.replace('_', ' ').title(),
-                                            'Status': '✅ Success',
-                                            'Prediction': result['prediction']
-                                        }
-                                        if 'probability_formatted' in result:
-                                            row['Probability'] = result['probability_formatted']
-                                            row['Confidence'] = result['confidence_level']
-                                        if 'anomaly_score_formatted' in result:
-                                            row['Anomaly Score'] = result['anomaly_score_formatted']
-                                            row['Severity'] = result['severity']
-                                    table_data.append(row)
+                                if result['status'] == 'error':
+                                    row = {
+                                        'Model': model_name.replace('_', ' ').title(),
+                                        'Status': '❌ Error',
+                                        'Details': result['error_message']
+                                    }
+                                else:
+                                    row = {
+                                        'Model': model_name.replace('_', ' ').title(),
+                                        'Status': '✅ Success',
+                                        'Prediction': result['prediction']
+                                    }
+                                    if 'probability_formatted' in result:
+                                        row['Probability'] = result['probability_formatted']
+                                        row['Confidence'] = result['confidence_level']
+                                    if 'anomaly_score_formatted' in result:
+                                        row['Anomaly Score'] = result['anomaly_score_formatted']
+                                        row['Severity'] = result['severity']
+                                table_data.append(row)
                                     
                                     # Display visual indicators
                                     if result['status'] == 'success':
