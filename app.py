@@ -180,8 +180,11 @@ if page == "Data Preparation":
                 st.subheader("Final Dataset Information")
                 st.write(f"Training set shape: {X_train_scaled.shape}")
                 st.write(f"Testing set shape: {X_test_scaled.shape}")
-                st.write(f"Failure ratio in training set: {y_train.mean():.2%}")
-                st.write(f"Failure ratio in testing set: {y_test.mean():.2%}")
+                # Calculate failure ratio as sum of failure instances divided by total instances, multiplied by 100
+                train_failure_ratio = 100 * (y_train == 1).sum() / len(y_train)
+                test_failure_ratio = 100 * (y_test == 1).sum() / len(y_test)
+                st.write(f"Failure ratio in training set: {train_failure_ratio:.2f}%")
+                st.write(f"Failure ratio in testing set: {test_failure_ratio:.2f}%")
 
 # Model Training Page
 elif page == "Model Training":
@@ -224,7 +227,9 @@ elif page == "Model Training":
 
         with col2:
             st.markdown("### Isolation Forest (Anomaly Detection)")
-            if_contamination = st.slider("Contamination", 0.01, 0.5, float(st.session_state.y_train.mean()))
+            # Calculate default contamination value as proportion of failures in training set
+            default_contamination = float((st.session_state.y_train == 1).sum() / len(st.session_state.y_train))
+            if_contamination = st.slider("Contamination", 0.01, 0.5, default_contamination)
             if_n_estimators = st.slider("Number of estimators (IF)", 50, 300, 100)
 
             if st.button("Train Isolation Forest"):
