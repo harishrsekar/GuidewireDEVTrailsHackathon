@@ -553,54 +553,64 @@ elif page == "Prediction":
                         input_df = pd.DataFrame([input_values])
 
                         # Make predictions with all models
+                        from utils import format_prediction_result
+                        
                         results = {
                             'status': 'success',
                             'timestamp': pd.Timestamp.now().isoformat(),
                             'predictions': {},
                             'metadata': {
                                 'feature_count': len(input_df.columns),
-                                'models_available': list(st.session_state.models.keys())
+                                'models_available': list(st.session_state.models.keys()),
+                                'request_id': f"req_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}",
+                                'input_type': 'manual'
                             }
                         }
 
                         for model_name, model in st.session_state.models.items():
                             if model_name != 'time_series':  # Skip time series model for single input
                                 try:
-                                    prediction_result = {
-                                        'status': 'success',
-                                        'model_type': model_name,
-                                        'prediction_time': pd.Timestamp.now().isoformat()
-                                    }
-
                                     if model_name == 'random_forest':
                                         pred_proba = model.predict_proba(input_df)[0][1]
                                         prediction = model.predict(input_df)[0]
-                                        prediction_result.update({
+                                        prediction_data = {
+                                            'model_type': model_name,
+                                            'prediction_time': pd.Timestamp.now().isoformat(),
                                             'prediction': 'Failure' if prediction == 1 else 'Normal',
                                             'probability': float(pred_proba),
                                             'probability_formatted': f"{pred_proba:.2%}",
                                             'confidence_level': 'High' if abs(pred_proba - 0.5) > 0.3 else 'Medium' if abs(pred_proba - 0.5) > 0.15 else 'Low'
-                                        })
+                                        }
                                     elif model_name == 'isolation_forest':
                                         anomaly_score = model.score_samples(input_df)[0]
                                         prediction = model.predict(input_df)[0]
-                                        prediction_result.update({
+                                        prediction_data = {
+                                            'model_type': model_name,
+                                            'prediction_time': pd.Timestamp.now().isoformat(),
                                             'prediction': 'Anomaly' if prediction == -1 else 'Normal',
                                             'anomaly_score': float(anomaly_score),
                                             'anomaly_score_formatted': f"{anomaly_score:.4f}",
                                             'severity': 'High' if abs(anomaly_score) > 0.75 else 'Medium' if abs(anomaly_score) > 0.5 else 'Low'
-                                        })
-
-                                    results['predictions'][model_name] = prediction_result
+                                        }
+                                        
+                                    # Use the utility function to format the results consistently
+                                    results['predictions'][model_name] = format_prediction_result(
+                                        model_name, 
+                                        prediction_data
+                                    )
 
                                 except Exception as e:
-                                    results['predictions'][model_name] = {
-                                        'status': 'error',
-                                        'model_type': model_name,
+                                    import traceback
+                                    error_details = {
                                         'error_message': str(e),
-                                        'error_type': type(e).__name__,
-                                        'timestamp': pd.Timestamp.now().isoformat()
+                                        'traceback': traceback.format_exc(),
+                                        'error_type': type(e).__name__
                                     }
+                                    results['predictions'][model_name] = format_prediction_result(
+                                        model_name, 
+                                        prediction_data={},
+                                        error=str(e)
+                                    )
 
                         # Display results
                         st.markdown("---")
@@ -756,28 +766,75 @@ elif page == "Prediction":
                             # Make predictions with all models
                             if st.button("Run Batch Prediction"):
                                 with st.spinner("Making predictions..."):
-                                    results = {}
+                                    from utils import format_prediction_result
+                                    
+                                    # Create a structured response format
+                                    results = {
+                                        'status': 'success',
+                                        'timestamp': pd.Timestamp.now().isoformat(),
+                                        'predictions': {},
+                                        'metadata': {
+                                            'feature_count': len(test_data_processed.columns),
+                                            'sample_count': len(test_data_processed),
+                                            'models_available': list(st.session_state.models.keys()),
+                                            'request_id': f"batch_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}",
+                                            'input_type': 'batch'
+                                        }
+                                    }
 
                                     for model_name, model in st.session_state.models.items():
-                                        if model_name != 'time_series':
+                                        if model_name != 'time_series':  # Skip time series model for batch
                                             try:
                                                 if model_name == 'random_forest':
                                                     predictions = model.predict(test_data_processed)
                                                     probabilities = model.predict_proba(test_data_processed)[:, 1]
-                                                    results[model_name] = {
-                                                        'predictions': predictions,
-                                                        'probabilities': probabilities
+                                                    prediction_data = {
+                                                        'model_type': model_name,
+                                                        'prediction_time': pd.Timestamp.now().isoformat(),
+                                                        'predictions': predictions.tolist(),  # Convert to list for JSON serialization
+                                                        'probabilities': probabilities.tolist(), # Convert to list for JSON serialization
+                                                        'prediction_summary': {
+                                                            'failure_count': int(sum(predictions)),
+                                                            'total_count': len(predictions),
+                                                            'failure_rate': float(sum(predictions) / len(predictions))
+                                                        }
                                                     }
+                                                    
                                                 elif model_name == 'isolation_forest':
-                                                    predictions = model.predict(test_data_processed)
+                                                    raw_predictions = model.predict(test_data_processed)
                                                     scores = model.score_samples(test_data_processed)
                                                     # Convert -1/1 to 1/0 (anomaly/normal)
-                                                    predictions = np.where(predictions == -1, 1, 0)
-                                                    results[model_name] = {
-                                                        'predictions': predictions,
-                                                        'scores': scores
+                                                    predictions = np.where(raw_predictions == -1, 1, 0)
+                                                    prediction_data = {
+                                                        'model_type': model_name,
+                                                        'prediction_time': pd.Timestamp.now().isoformat(),
+                                                        'predictions': predictions.tolist(),  # Convert to list for JSON serialization
+                                                        'scores': scores.tolist(),  # Convert to list for JSON serialization
+                                                        'prediction_summary': {
+                                                            'anomaly_count': int(sum(predictions)),
+                                                            'total_count': len(predictions),
+                                                            'anomaly_rate': float(sum(predictions) / len(predictions))
+                                                        }
                                                     }
+                                                
+                                                # Use the utility function to format the results consistently
+                                                results['predictions'][model_name] = format_prediction_result(
+                                                    model_name, 
+                                                    prediction_data
+                                                )
+                                                
                                             except Exception as e:
+                                                import traceback
+                                                error_details = {
+                                                    'error_message': str(e),
+                                                    'traceback': traceback.format_exc(),
+                                                    'error_type': type(e).__name__
+                                                }
+                                                results['predictions'][model_name] = format_prediction_result(
+                                                    model_name, 
+                                                    prediction_data={},
+                                                    error=str(e)
+                                                )
                                                 st.error(f"Error with {model_name}: {e}")
 
                                     # Display results
@@ -786,17 +843,31 @@ elif page == "Prediction":
                                     # First show a summary of all model results
                                     summary_metrics = {}
 
-                                    for model_name, result in results.items():
-                                        if 'predictions' in result:
-                                            failure_count = int(sum(result['predictions']))
-                                            total_count = len(result['predictions'])
-                                            failure_percentage = (failure_count / total_count) * 100
-
-                                            summary_metrics[model_name] = {
-                                                'Total Samples': total_count,
-                                                'Predicted Failures': failure_count,
-                                                'Failure Rate': f"{failure_percentage:.2f}%"
-                                            }
+                                    for model_name, result in results['predictions'].items():
+                                        if result['status'] == 'success' and 'prediction_summary' in result:
+                                            summary = result['prediction_summary']
+                                            
+                                            # Display different metrics based on model type
+                                            if result['model_type'] == 'random_forest':
+                                                failure_count = summary['failure_count']
+                                                total_count = summary['total_count']
+                                                failure_rate = summary['failure_rate']
+                                                
+                                                summary_metrics[model_name] = {
+                                                    'Total Samples': total_count,
+                                                    'Predicted Failures': failure_count,
+                                                    'Failure Rate': f"{failure_rate * 100:.2f}%"
+                                                }
+                                            elif result['model_type'] == 'isolation_forest':
+                                                anomaly_count = summary['anomaly_count']
+                                                total_count = summary['total_count']
+                                                anomaly_rate = summary['anomaly_rate']
+                                                
+                                                summary_metrics[model_name] = {
+                                                    'Total Samples': total_count,
+                                                    'Detected Anomalies': anomaly_count,
+                                                    'Anomaly Rate': f"{anomaly_rate * 100:.2f}%"
+                                                }
 
                                     if summary_metrics:
                                         # Convert to DataFrame for display
@@ -819,13 +890,18 @@ elif page == "Prediction":
                                         st.plotly_chart(fig)
 
                                     # Show detailed results for each model
-                                    for model_name, result in results.items():
+                                    for model_name, result in results['predictions'].items():
                                         with st.expander(f"{model_name.replace('_', ' ').title()} Detailed Predictions"):
-                                            if 'predictions' in result:
+                                            if result['status'] == 'success':
                                                 # Add predictions to a copy of the original data
                                                 result_df = test_data.copy()
-                                                result_df[f'{model_name}_prediction'] = result['predictions']
-
+                                                
+                                                if 'predictions' in result:
+                                                    result_df[f'{model_name}_prediction'] = result['predictions']
+                                                else:
+                                                    # Try the model-specific location for predictions
+                                                    result_df[f'{model_name}_prediction'] = result.get('prediction_summary', {}).get('predictions', [])
+                                                
                                                 if 'probabilities' in result:
                                                     result_df[f'{model_name}_probability'] = result['probabilities']
                                                 if 'scores' in result:
@@ -834,28 +910,42 @@ elif page == "Prediction":
                                                 # Display the dataframe with predictions
                                                 st.dataframe(result_df)
 
-                                                # Calculate and display metrics
-                                                failure_count = sum(result['predictions'])
-                                                total_count = len(result['predictions'])
-                                                failure_percentage = (failure_count / total_count) * 100
-
-                                                # Show metrics in a more visual way
-                                                col1, col2, col3 = st.columns(3)
-                                                with col1:
-                                                    st.metric("Total Samples", total_count)
-                                                with col2:
-                                                    st.metric("Predicted Failures", int(failure_count))
-                                                with col3:
-                                                    st.metric("Failure Rate", f"{failure_percentage:.2f}%")
-
+                                                # Get metrics from the prediction summary if available
+                                                if 'prediction_summary' in result:
+                                                    summary = result['prediction_summary']
+                                                    
+                                                    # Show metrics in a more visual way
+                                                    col1, col2, col3 = st.columns(3)
+                                                    
+                                                    with col1:
+                                                        st.metric("Total Samples", summary.get('total_count', 0))
+                                                    
+                                                    # Display different metrics based on model type
+                                                    if result['model_type'] == 'random_forest':
+                                                        with col2:
+                                                            st.metric("Predicted Failures", int(summary.get('failure_count', 0)))
+                                                        with col3:
+                                                            failure_rate = summary.get('failure_rate', 0)
+                                                            st.metric("Failure Rate", f"{failure_rate * 100:.2f}%")
+                                                    elif result['model_type'] == 'isolation_forest':
+                                                        with col2:
+                                                            st.metric("Detected Anomalies", int(summary.get('anomaly_count', 0)))
+                                                        with col3:
+                                                            anomaly_rate = summary.get('anomaly_rate', 0)
+                                                            st.metric("Anomaly Rate", f"{anomaly_rate * 100:.2f}%")
+                                                
                                                 # Plot predictions distribution
-                                                fig = px.histogram(
-                                                    result_df, 
-                                                    x=f'{model_name}_prediction',
-                                                    color=f'{model_name}_prediction',
-                                                    title=f'Distribution of Predictions - {model_name.replace("_", " ").title()}'
-                                                )
-                                                st.plotly_chart(fig)
+                                                if f'{model_name}_prediction' in result_df.columns:
+                                                    fig = px.histogram(
+                                                        result_df, 
+                                                        x=f'{model_name}_prediction',
+                                                        color=f'{model_name}_prediction',
+                                                        title=f'Distribution of Predictions - {model_name.replace("_", " ").title()}'
+                                                    )
+                                                    st.plotly_chart(fig)
+                                            else:
+                                                # Display error message
+                                                st.error(f"Error during prediction: {result.get('error', 'Unknown error')}")
 
                                 st.success("Batch prediction completed!")
                     else:
