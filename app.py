@@ -72,11 +72,18 @@ if page == "Data Preparation":
         failure_rate = st.slider("Failure rate (%):", 1, 50, 10)
         time_steps = st.slider("Time periods to simulate:", 10, 100, 30)
 
-        if st.button("Generate Data"):
-            with st.spinner("Generating Kubernetes metrics data..."):
+        if st.button("Generate Data with Failure Samples"):
+            with st.spinner("Generating Kubernetes metrics data with specified failure rate..."):
                 data = generate_kubernetes_data(num_samples, failure_rate/100, time_steps)
+                # Double-check the actual failure rate in the generated data
+                actual_failure_count = data['failure'].sum()
+                actual_failure_rate = (actual_failure_count / len(data)) * 100
                 st.session_state.data = data
-                st.success(f"Generated {len(data)} samples with {failure_rate}% failure rate")
+                st.success(f"Generated {len(data)} samples with {actual_failure_rate:.2f}% actual failure rate ({actual_failure_count} failure cases)")
+                
+                # Display explicit warning if no failures were generated
+                if actual_failure_count == 0:
+                    st.warning("⚠️ No failure cases were generated! Please increase the failure rate and try again.")
 
     else:
         st.subheader("Upload Your Own Data")
@@ -93,8 +100,13 @@ if page == "Data Preparation":
                 if 'failure' not in data.columns:
                     st.error("The uploaded data must contain a 'failure' column.")
                 else:
+                    # Force the failure column to be an integer type
+                    data['failure'] = data['failure'].apply(lambda x: int(bool(x)))
+                    # Check if there are any failure cases
+                    failure_count = data['failure'].sum()
+                    failure_ratio = (failure_count / len(data)) * 100
                     st.session_state.data = data
-                    st.success(f"Uploaded data with {len(data)} samples")
+                    st.success(f"Uploaded data with {len(data)} samples and {failure_ratio:.2f}% failure rate")
             except Exception as e:
                 st.error(f"Error reading the file: {e}")
 

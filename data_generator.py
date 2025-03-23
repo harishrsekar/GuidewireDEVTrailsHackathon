@@ -149,10 +149,35 @@ def generate_kubernetes_data(n_samples=5000, failure_rate=0.1, time_steps=30):
     # Ensure the failure column is explicitly converted to integer type
     df['failure'] = df['failure'].astype(int)
     
-    # Make sure some failures exist (debug)
-    if df['failure'].sum() == 0:
-        # Force at least 10% of rows to have failure=1 if none exist
-        indices = np.random.choice(df.index, size=int(len(df) * 0.1), replace=False)
-        df.loc[indices, 'failure'] = 1
+    # Make sure failures exist at the requested rate
+    actual_failure_count = df['failure'].sum()
+    expected_failure_count = int(len(df) * failure_rate)
+    
+    print(f"Expected failures: {expected_failure_count}, Actual failures: {actual_failure_count}")
+    
+    if actual_failure_count < expected_failure_count:
+        # We need to add more failures
+        # Select from non-failure rows
+        non_failure_indices = df[df['failure'] == 0].index
+        # Calculate how many more failures we need
+        additional_failures_needed = expected_failure_count - actual_failure_count
+        # Select random indices to convert to failures
+        if len(non_failure_indices) >= additional_failures_needed:
+            indices_to_convert = np.random.choice(non_failure_indices, size=additional_failures_needed, replace=False)
+            # Apply a random failure pattern to each
+            for idx in indices_to_convert:
+                pattern = np.random.choice(failure_patterns)
+                original_data = {k: v for k, v in df.loc[idx].items()}
+                # Replace with failure data
+                failure_data = pattern(original_data)
+                for k, v in failure_data.items():
+                    df.at[idx, k] = v
+    
+    # Final check and conversion to ensure the failure column is integer type
+    df['failure'] = df['failure'].astype(int)
+    
+    # Verify and report final failure rate
+    final_failure_rate = df['failure'].sum() / len(df) * 100
+    print(f"Final failure rate: {final_failure_rate:.2f}%")
     
     return df

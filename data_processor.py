@@ -122,22 +122,38 @@ def preprocess_data(data):
         
         # Ensure 'failure' is binary (0 or 1) and contains actual failures
         if 'failure' in df.columns:
-            # First convert to integer type
-            df['failure'] = df['failure'].astype(int)
+            # First convert to integer type - explicitly handle all input formats
+            df['failure'] = df['failure'].apply(lambda x: int(bool(x)))
             
             # Check if there are any failure cases (1s)
             failure_count = df['failure'].sum()
-            print(f"Detected {failure_count} failure cases out of {len(df)} total records.")
+            total_records = len(df)
+            failure_ratio = (failure_count / total_records) * 100
+            print(f"Detected {failure_count} failure cases out of {total_records} total records ({failure_ratio:.2f}%)")
             
-            # Add synthetic failures if none exist - crucial for model training
-            if failure_count == 0:
-                print("WARNING: No failures detected in dataset. Adding synthetic failures for model training.")
-                # Force at least 10% of rows to have failure=1
-                indices = np.random.choice(df.index, size=int(len(df) * 0.1), replace=False)
-                df.loc[indices, 'failure'] = 1
+            # Add synthetic failures if very few exist - crucial for model training
+            min_failure_percentage = 5.0  # Minimum 5% failure rate for effective model training
+            if failure_ratio < min_failure_percentage:
+                # Calculate how many more failures we need
+                target_count = int(total_records * (min_failure_percentage / 100))
+                additional_needed = target_count - failure_count
+                
+                print(f"WARNING: Low failure rate detected ({failure_ratio:.2f}%). Adding {additional_needed} synthetic failures for model training.")
+                
+                # Get indices of non-failure rows
+                non_failure_indices = df[df['failure'] == 0].index
+                
+                # Select random indices to convert
+                indices_to_convert = np.random.choice(non_failure_indices, size=min(additional_needed, len(non_failure_indices)), replace=False)
+                df.loc[indices_to_convert, 'failure'] = 1
                 
                 # Report the change
-                metadata['synthetic_failures_added'] = len(indices)
+                metadata['synthetic_failures_added'] = len(indices_to_convert)
+                
+            # Final verification
+            final_failure_count = df['failure'].sum()
+            final_failure_ratio = (final_failure_count / total_records) * 100
+            print(f"Final failure distribution: {final_failure_count} out of {total_records} ({final_failure_ratio:.2f}%)")
         
         # Check for any remaining infinities
         for col in df.select_dtypes(include=['number']).columns:
@@ -329,6 +345,26 @@ def handle_class_imbalance(X, y, method='SMOTE'):
         X_copy[col] = X_copy[col].fillna(col_mean)
     
     try:
+        # First check if y has both 0 and 1 values
+        if y.nunique() < 2:
+            print("WARNING: Target variable contains only one class, cannot apply resampling.")
+            # If only one class, artificially create instances of the other class
+            if 1 not in y.values:
+                print("No failure cases found in training data. Creating synthetic failures.")
+                # Convert 10% of non-failures to failures
+                non_failure_indices = y.index
+                indices_to_convert = np.random.choice(non_failure_indices, size=max(1, int(len(y) * 0.1)), replace=False)
+                y_copy = y.copy()
+                y_copy.loc[indices_to_convert] = 1
+                # Use the modified target variable
+                y = y_copy
+        
+        # Log initial class distribution
+        failure_count = sum(y == 1)
+        total_count = len(y)
+        failure_ratio = (failure_count / total_count) * 100
+        print(f"Before resampling: {failure_count} failures out of {total_count} ({failure_ratio:.2f}%)")
+        
         # Set up the appropriate sampler
         if method == 'SMOTE':
             sampler = SMOTE(random_state=42)
@@ -341,6 +377,12 @@ def handle_class_imbalance(X, y, method='SMOTE'):
         
         # Perform resampling
         X_resampled, y_resampled = sampler.fit_resample(X_copy, y)
+        
+        # Log the effect of resampling
+        resampled_failure_count = sum(y_resampled == 1)
+        resampled_total_count = len(y_resampled)
+        resampled_failure_ratio = (resampled_failure_count / resampled_total_count) * 100
+        print(f"After resampling: {resampled_failure_count} failures out of {resampled_total_count} ({resampled_failure_ratio:.2f}%)")
         
         return X_resampled, y_resampled
     
