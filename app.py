@@ -713,39 +713,7 @@ elif page == "Prediction":
                                 perf_df = pd.DataFrame(perf_data)
                                 st.table(perf_df)
 
-                        # Show visual indicators for each model prediction
-                        if results:
-                            st.markdown("### Prediction Details")
-
-                            for model_name, result in results.items():
-                                st.markdown(f"**{model_name.replace('_', ' ').title()}**")
-                                if 'error' in result:
-                                    st.error(f"Error: {result['error']}")
-                                else:
-                                    if 'prediction' in result:
-                                        prediction = result['prediction']
-                                        is_failure = prediction in ['Failure', 'Anomaly']
-
-                                        # Create columns for better layout
-                                        col1, col2 = st.columns(2)
-
-                                        with col1:
-                                            if is_failure:
-                                                st.error(f"Prediction: {prediction}")
-                                            else:
-                                                st.success(f"Prediction: {prediction}")
-
-                                        with col2:
-                                            if 'probability' in result:
-                                                st.metric("Failure Probability", result['probability'])
-                                            if 'anomaly_score' in result:
-                                                st.metric("Anomaly Score", result['anomaly_score'])
-
-                                        # Add more context to the prediction
-                                        if is_failure:
-                                            st.warning("⚠️ Potential cluster issue detected! Recommendation: Review system resources and logs for irregularities.")
-                                        else:
-                                            st.info("✅ Cluster appears to be operating normally based on the current metrics.")
+                        # Visual indicators are now handled in the tabbed interface above
                 else:
                     st.error("No trained models available. Please complete the model training step first.")
 
