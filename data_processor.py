@@ -155,7 +155,17 @@ def apply_feature_engineering(data, window_sizes=[5, 10], apply_pca=False, n_com
         
         # Apply PCA
         pca = PCA(n_components=n_components)
-        pca_result = pca.fit_transform(df[numeric_cols])
+        # Clean numeric data before PCA
+    numeric_data = df[numeric_cols].copy()
+    numeric_data = numeric_data.replace([np.inf, -np.inf], np.nan)
+    numeric_data = numeric_data.fillna(numeric_data.mean())
+    
+    # Apply standard scaling before PCA
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(numeric_data)
+    
+    # Now apply PCA on cleaned and scaled data
+    pca_result = pca.fit_transform(scaled_data)
         
         # Add PCA components to dataframe
         for i in range(n_components):
