@@ -792,7 +792,7 @@ elif page == "Prediction":
                                                          help=f"Feature: {result.get('feature', 'unknown')}")
                                                 
                                                 # Create a time series plot if we have forecast data
-                                                if 'forecast' in result and result['forecast']:
+                                                if 'forecast' in result and isinstance(result['forecast'], list) and len(result['forecast']) > 0:
                                                     import plotly.graph_objects as go
                                                     
                                                     # Create date range for forecast
@@ -1174,7 +1174,8 @@ elif page == "Prediction":
                                                     threshold = fitted_model.fittedvalues.mean() * 1.5
                                                     
                                                     # Determine if the forecast indicates a potential failure
-                                                    failure_points = (forecast > threshold).sum()
+                                                    # Convert Series comparison result to numeric with .astype(int) before summing
+                                                    failure_points = (forecast > threshold).astype(int).sum()
                                                     trend_severity = 'High' if failure_points > len(forecast) * 0.6 else \
                                                                     'Medium' if failure_points > len(forecast) * 0.3 else 'Low'
                                                     
