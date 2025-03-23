@@ -650,29 +650,14 @@ elif page == "Prediction":
                                         for idx, row in results_df.iterrows():
                                             model_name = row['Model'].lower().replace(' ', '_')
                                             if model_name in st.session_state.evaluation_results:
-                                                acc = st.session_state.evaluation_results[model_name].get('accuracy', 0)
-                                                results_df.at[idx, 'Model Accuracy'] = f"{acc:.2%}"
-                                            
-                                            # Add probability/confidence if available
-                                            if model_name in results['predictions']:
-                                                pred_result = results['predictions'][model_name]
-                                                if 'probability_formatted' in pred_result:
-                                                    results_df.at[idx, 'Confidence'] = pred_result['probability_formatted']
-                                                elif 'anomaly_score_formatted' in pred_result:
-                                                    results_df.at[idx, 'Anomaly Score'] = pred_result['anomaly_score_formatted']
+                                                results_df.at[idx, 'Model Accuracy'] = f"{st.session_state.evaluation_results[model_name]['accuracy']:.2%}"
                                     
                                     # Reorder columns to show important info first
-                                    cols = ['Model', 'Status', 'Prediction', 'Model Accuracy', 'Confidence', 'Anomaly Score']
-                                    existing_cols = [col for col in cols if col in results_df.columns]
-                                    other_cols = [col for col in results_df.columns if col not in cols]
-                                    results_df = results_df[existing_cols + other_cols]
+                                    cols = ['Model', 'Status', 'Prediction', 'Model Accuracy']
+                                    cols.extend([col for col in results_df.columns if col not in cols])
+                                    results_df = results_df[cols]
                                     
-                                    # Format the display
-                                    st.markdown("### Model Predictions Summary")
-                                    st.table(results_df.style.format({
-                                        'Model Accuracy': lambda x: x if pd.isna(x) else f"{float(x.strip('%')):.2f}%",
-                                        'Confidence': lambda x: x if pd.isna(x) else f"{float(x.strip('%')):.2f}%"
-                                    }))
+                                    st.table(results_df)  # Using st.table for fixed-width display
                                 
                                 # Show visual indicators for each model
                                 st.markdown("### Prediction Details")
