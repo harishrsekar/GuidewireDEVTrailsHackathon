@@ -27,21 +27,34 @@ def preprocess_data(data):
     # Metadata to store preprocessing info
     metadata = {}
     
-    # Handle missing values
+    # Handle infinite values first
+    numeric_cols = df.select_dtypes(include=['number']).columns
+    for col in numeric_cols:
+        # Replace inf and -inf with NaN so they can be handled in the missing values step
+        df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+    
+    # Count missing values after replacing infinities
     missing_counts = df.isnull().sum()
     metadata['missing_values'] = missing_counts.to_dict()
     
     # For numeric columns, fill NaNs with median
-    numeric_cols = df.select_dtypes(include=['number']).columns
     for col in numeric_cols:
         if df[col].isnull().sum() > 0:
-            df[col] = df[col].fillna(df[col].median())
+            median_val = df[col].median()
+            # If median is NaN (all values are NaN), use 0
+            if pd.isna(median_val):
+                median_val = 0
+            df[col] = df[col].fillna(median_val)
     
     # For categorical columns, fill NaNs with mode
     categorical_cols = df.select_dtypes(include=['object', 'category']).columns
     for col in categorical_cols:
         if df[col].isnull().sum() > 0:
-            df[col] = df[col].fillna(df[col].mode()[0])
+            # Get mode or use a default value if no mode exists
+            if len(df[col].mode()) > 0:
+                df[col] = df[col].fillna(df[col].mode()[0])
+            else:
+                df[col] = df[col].fillna("unknown")
     
     # Convert timestamp to datetime if it exists
     if 'timestamp' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
@@ -65,6 +78,11 @@ def preprocess_data(data):
     # Ensure 'failure' is binary (0 or 1)
     if 'failure' in df.columns:
         df['failure'] = df['failure'].astype(int)
+    
+    # Check for any remaining infinities
+    for col in df.select_dtypes(include=['number']).columns:
+        # Replace any remaining inf with large values
+        df[col] = df[col].replace([np.inf, -np.inf], [1e6, -1e6])
     
     return df, metadata
 
@@ -123,7 +141,11 @@ def apply_feature_engineering(data, window_sizes=[5, 10], apply_pca=False, n_com
                 df[f'{col}_roll_max_{window}'] = df[col].rolling(window=window, min_periods=1).max()
                 
                 # Rate of change
-                df[f'{col}_roc_{window}'] = df[col].pct_change(periods=window).fillna(0)
+                # Calculate pct_change but fill NaN and replace inf with a large number
+                roc_values = df[col].pct_change(periods=window).fillna(0)
+                # Replace inf and -inf with more manageable values
+                roc_values = roc_values.replace([np.inf, -np.inf], [1e6, -1e6])
+                df[f'{col}_roc_{window}'] = roc_values
     
     # Create interaction features for important metrics
     if 'cpu_usage_percent' in df.columns and 'memory_usage_percent' in df.columns:
@@ -153,23 +175,39 @@ def apply_feature_engineering(data, window_sizes=[5, 10], apply_pca=False, n_com
         # Ensure n_components isn't larger than number of features
         n_components = min(n_components, len(numeric_cols))
         
-        # Apply PCA
-        pca = PCA(n_components=n_components)
-        # Clean numeric data before PCA
-        numeric_data = df[numeric_cols].copy()
-        numeric_data = numeric_data.replace([np.inf, -np.inf], np.nan)
-        numeric_data = numeric_data.fillna(numeric_data.mean())
-        
-        # Apply standard scaling before PCA
-        scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(numeric_data)
-        
-        # Now apply PCA on cleaned and scaled data
-        pca_result = pca.fit_transform(scaled_data)
-        
-        # Add PCA components to dataframe
-        for i in range(n_components):
-            df[f'pca_component_{i+1}'] = pca_result[:, i]
+        try:
+            # Apply PCA
+            pca = PCA(n_components=n_components)
+            
+            # Clean numeric data before PCA
+            numeric_data = df[numeric_cols].copy()
+            
+            # Replace infinities with NaN
+            numeric_data = numeric_data.replace([np.inf, -np.inf], np.nan)
+            
+            # Fill NaN values with column means (and handle columns with all NaN)
+            for col in numeric_data.columns:
+                col_mean = numeric_data[col].mean()
+                if pd.isna(col_mean):  # If the mean is NaN (all values are NaN)
+                    col_mean = 0
+                numeric_data[col] = numeric_data[col].fillna(col_mean)
+            
+            # Apply standard scaling before PCA
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(numeric_data)
+            
+            # Now apply PCA on cleaned and scaled data
+            pca_result = pca.fit_transform(scaled_data)
+            
+            # Add PCA components to dataframe
+            for i in range(n_components):
+                df[f'pca_component_{i+1}'] = pca_result[:, i]
+            
+        except Exception as e:
+            # Log the error but continue without PCA
+            print(f"PCA could not be applied: {e}")
+            # Add a note in the dataframe that PCA was not applied
+            df['pca_applied'] = 0
     
     # Drop timestamp column as it's not needed for modeling
     if 'timestamp' in df.columns:
@@ -197,19 +235,39 @@ def handle_class_imbalance(X, y, method='SMOTE'):
     pandas.Series
         Balanced target variable
     """
-    if method == 'SMOTE':
-        sampler = SMOTE(random_state=42)
-    elif method == 'RandomUnderSampler':
-        sampler = RandomUnderSampler(random_state=42)
-    elif method == 'ADASYN':
-        sampler = ADASYN(random_state=42)
-    else:
-        return X, y
+    # Create a copy to avoid modifying original data
+    X_copy = X.copy()
     
-    # Perform resampling
-    X_resampled, y_resampled = sampler.fit_resample(X, y)
+    # Handle any NaN or infinite values that would cause SMOTE to fail
+    X_copy = X_copy.replace([np.inf, -np.inf], np.nan)
     
-    return X_resampled, y_resampled
+    # Fill NaN values with column means (or 0 if all values are NaN)
+    for col in X_copy.columns:
+        col_mean = X_copy[col].mean()
+        if pd.isna(col_mean):  # If the mean is NaN (all values are NaN)
+            col_mean = 0
+        X_copy[col] = X_copy[col].fillna(col_mean)
+    
+    try:
+        # Set up the appropriate sampler
+        if method == 'SMOTE':
+            sampler = SMOTE(random_state=42)
+        elif method == 'RandomUnderSampler':
+            sampler = RandomUnderSampler(random_state=42)
+        elif method == 'ADASYN':
+            sampler = ADASYN(random_state=42)
+        else:
+            return X_copy, y
+        
+        # Perform resampling
+        X_resampled, y_resampled = sampler.fit_resample(X_copy, y)
+        
+        return X_resampled, y_resampled
+    
+    except Exception as e:
+        # Log the error but return the original data if resampling fails
+        print(f"Class imbalance handling failed: {e}")
+        return X_copy, y
 
 def apply_scaling(X_train, X_test, method='StandardScaler'):
     """
@@ -233,6 +291,25 @@ def apply_scaling(X_train, X_test, method='StandardScaler'):
     scaler
         Fitted scaler object
     """
+    # Create copies to avoid modifying the original data
+    X_train_copy = X_train.copy()
+    X_test_copy = X_test.copy()
+    
+    # Handle any remaining infinity or very large values
+    X_train_copy = X_train_copy.replace([np.inf, -np.inf], np.nan)
+    X_test_copy = X_test_copy.replace([np.inf, -np.inf], np.nan)
+    
+    # Fill NaN values with column means
+    for col in X_train_copy.columns:
+        col_mean = X_train_copy[col].mean()
+        # If the mean is NaN (all values in column are NaN), use 0 instead
+        if pd.isna(col_mean):
+            col_mean = 0
+        
+        X_train_copy[col] = X_train_copy[col].fillna(col_mean)
+        X_test_copy[col] = X_test_copy[col].fillna(col_mean)
+    
+    # Select the appropriate scaler
     if method == 'StandardScaler':
         scaler = StandardScaler()
     elif method == 'RobustScaler':
@@ -245,16 +322,16 @@ def apply_scaling(X_train, X_test, method='StandardScaler'):
     
     # Fit on training data
     X_train_scaled = pd.DataFrame(
-        scaler.fit_transform(X_train),
-        columns=X_train.columns,
-        index=X_train.index
+        scaler.fit_transform(X_train_copy),
+        columns=X_train_copy.columns,
+        index=X_train_copy.index
     )
     
     # Transform test data
     X_test_scaled = pd.DataFrame(
-        scaler.transform(X_test),
-        columns=X_test.columns,
-        index=X_test.index
+        scaler.transform(X_test_copy),
+        columns=X_test_copy.columns,
+        index=X_test_copy.index
     )
     
     return X_train_scaled, X_test_scaled, scaler
