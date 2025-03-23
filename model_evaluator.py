@@ -51,6 +51,10 @@ def evaluate_model(model, X_test, y_test, model_type='random_forest'):
         report = classification_report(y_test, y_pred, output_dict=True)
         results['classification_report'] = report
         
+        # Calculate and store confusion matrix
+        cm = confusion_matrix(y_test, y_pred)
+        results['confusion_matrix'] = cm.tolist()  # Convert to list for JSON serialization
+        
     elif model_type == 'isolation_forest':
         # For Isolation Forest, -1 is anomaly, 1 is normal
         # Convert to 1 for anomaly (failure), 0 for normal to match our target
@@ -73,6 +77,10 @@ def evaluate_model(model, X_test, y_test, model_type='random_forest'):
         # Generate detailed classification report
         report = classification_report(y_test, y_pred, output_dict=True)
         results['classification_report'] = report
+        
+        # Calculate and store confusion matrix
+        cm = confusion_matrix(y_test, y_pred)
+        results['confusion_matrix'] = cm.tolist()  # Convert to list for JSON serialization
     
     return results
 
