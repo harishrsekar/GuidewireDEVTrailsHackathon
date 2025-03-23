@@ -47,7 +47,7 @@ The Random Forest model is used for classification-based prediction of Kubernete
 - Maximum depth: 5-30 (configurable)
 - Class weights: Automatically adjusted for imbalanced datasets
 
-<img src="[https://github.com/favicon.ico](https://github.com/user-attachments/assets/74dc6403-df66-460f-8368-11bc8a26d12f)" width="480">
+<img src="https://github.com/user-attachments/assets/74dc6403-df66-460f-8368-11bc8a26d12f" width="480">
 
 ### Isolation Forest
 
