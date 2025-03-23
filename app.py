@@ -293,6 +293,46 @@ elif page == "Model Evaluation":
                     
                     # Create a more user-friendly metrics display with color-coded performance indicators
                     st.write("### Key Performance Metrics")
+                    
+                    # Display metrics in a table format first
+                    metrics_table = pd.DataFrame({
+                        'Metric': ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC-ROC'],
+                        'Value': [
+                            f"{display_metrics.get('accuracy', 0):.4f}",
+                            f"{display_metrics.get('precision', 0):.4f}",
+                            f"{display_metrics.get('recall', 0):.4f}",
+                            f"{display_metrics.get('f1', 0):.4f}",
+                            f"{display_metrics.get('auc', 0):.4f}" if 'auc' in display_metrics else 'N/A'
+                        ]
+                    })
+                    
+                    # Add interpretation column
+                    metrics_table['Interpretation'] = [
+                        'Excellent' if display_metrics.get('accuracy', 0) > 0.9 else 
+                        'Good' if display_metrics.get('accuracy', 0) > 0.8 else 
+                        'Fair' if display_metrics.get('accuracy', 0) > 0.7 else 'Poor',
+                        
+                        'Excellent' if display_metrics.get('precision', 0) > 0.9 else 
+                        'Good' if display_metrics.get('precision', 0) > 0.8 else 
+                        'Fair' if display_metrics.get('precision', 0) > 0.7 else 'Poor',
+                        
+                        'Excellent' if display_metrics.get('recall', 0) > 0.9 else 
+                        'Good' if display_metrics.get('recall', 0) > 0.8 else 
+                        'Fair' if display_metrics.get('recall', 0) > 0.7 else 'Poor',
+                        
+                        'Excellent' if display_metrics.get('f1', 0) > 0.9 else 
+                        'Good' if display_metrics.get('f1', 0) > 0.8 else 
+                        'Fair' if display_metrics.get('f1', 0) > 0.7 else 'Poor',
+                        
+                        'Excellent' if display_metrics.get('auc', 0) > 0.9 else 
+                        'Good' if display_metrics.get('auc', 0) > 0.8 else 
+                        'Fair' if display_metrics.get('auc', 0) > 0.7 else 'Poor' if 'auc' in display_metrics else 'N/A'
+                    ]
+                    
+                    # Display the metrics table
+                    st.table(metrics_table)
+                    
+                    # Also show metrics with visual indicators
                     col1, col2 = st.columns(2)
                     
                     with col1:
@@ -505,12 +545,14 @@ elif page == "Prediction":
                     
                     submitted = st.form_submit_button("Predict")
                     
+                    # Initialize results outside the conditional block
+                    results = {}
+                    
                     if submitted:
                         # Convert inputs to DataFrame
                         input_df = pd.DataFrame([input_values])
                         
                         # Make predictions with all models
-                        results = {}
                         for model_name, model in st.session_state.models.items():
                             if model_name != 'time_series':  # Skip time series model for single input
                                 try:
@@ -535,30 +577,60 @@ elif page == "Prediction":
                                     }
                         
                         # Display results
+                        st.markdown("---")
                         st.subheader("Prediction Results")
                         
-                        # First show a summary of all results
-                        summary_data = []
+                        # Simple table display for all results
+                        table_data = []
+                        
                         for model_name, result in results.items():
-                            if 'error' not in result and 'prediction' in result:
+                            if 'error' in result:
                                 row = {
                                     'Model': model_name.replace('_', ' ').title(),
-                                    'Prediction': result['prediction']
+                                    'Prediction': "Error",
+                                    'Details': result['error']
+                                }
+                            else:
+                                row = {
+                                    'Model': model_name.replace('_', ' ').title(),
+                                    'Prediction': result.get('prediction', 'N/A')
                                 }
                                 if 'probability' in result:
                                     row['Probability'] = result['probability']
                                 if 'anomaly_score' in result:
                                     row['Anomaly Score'] = result['anomaly_score']
-                                summary_data.append(row)
+                            table_data.append(row)
                         
-                        # Show summary table if we have results
-                        if summary_data:
-                            summary_df = pd.DataFrame(summary_data)
-                            st.dataframe(summary_df)
+                        # Convert to DataFrame and display as table
+                        if table_data:
+                            results_df = pd.DataFrame(table_data)
+                            st.table(results_df)  # Using st.table for fixed-width display
                         
-                        # Show detailed results per model
-                        for model_name, result in results.items():
-                            with st.expander(f"{model_name.replace('_', ' ').title()} Prediction Details"):
+                        # Display model performance metrics
+                        if st.session_state.evaluation_results:
+                            st.markdown("### Model Performance Metrics")
+                            perf_metrics = ['accuracy', 'precision', 'recall', 'f1']
+                            
+                            # Create performance metrics table
+                            perf_data = []
+                            for model_name, eval_results in st.session_state.evaluation_results.items():
+                                if model_name != 'time_series':
+                                    row = {'Model': model_name.replace('_', ' ').title()}
+                                    for metric in perf_metrics:
+                                        if metric in eval_results:
+                                            row[metric.capitalize()] = f"{eval_results[metric]:.4f}"
+                                    perf_data.append(row)
+                            
+                            if perf_data:
+                                perf_df = pd.DataFrame(perf_data)
+                                st.table(perf_df)
+                        
+                        # Show visual indicators for each model prediction
+                        if results:
+                            st.markdown("### Prediction Details")
+                            
+                            for model_name, result in results.items():
+                                st.markdown(f"**{model_name.replace('_', ' ').title()}**")
                                 if 'error' in result:
                                     st.error(f"Error: {result['error']}")
                                 else:
@@ -583,9 +655,9 @@ elif page == "Prediction":
                                         
                                         # Add more context to the prediction
                                         if is_failure:
-                                            st.warning("Potential cluster issue detected! Recommendation: Review system resources and logs for irregularities.")
+                                            st.warning("⚠️ Potential cluster issue detected! Recommendation: Review system resources and logs for irregularities.")
                                         else:
-                                            st.info("Cluster appears to be operating normally based on the current metrics.")
+                                            st.info("✅ Cluster appears to be operating normally based on the current metrics.")
                 else:
                     st.error("No trained models available. Please complete the model training step first.")
         
