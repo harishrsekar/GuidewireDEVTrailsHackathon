@@ -107,9 +107,11 @@ def plot_metrics_over_time(data, time_series_model_dict):
     plotly.graph_objects.Figure
         Interactive plot
     """
+    # Create default figure for error cases
+    fig = go.Figure()
+    
     # Check if we have an error in the model dictionary
     if 'error' in time_series_model_dict:
-        fig = go.Figure()
         fig.add_annotation(
             text=f"Error: {time_series_model_dict['error']}",
             xref="paper", yref="paper",
@@ -129,12 +131,35 @@ def plot_metrics_over_time(data, time_series_model_dict):
         if not all([model, forecast, feature, last_timestamp]):
             raise KeyError("Missing required time series model components")
             
-        # Prepare the data
-        historical_data = data.set_index('timestamp')[feature]
+        # Validate data format
+        if 'timestamp' not in data.columns:
+            raise ValueError("Data must contain a 'timestamp' column")
+            
+        if feature not in data.columns:
+            raise ValueError(f"Feature '{feature}' not found in data columns")
+            
+        # Prepare the data - handle potential data type issues
+        try:
+            # Convert to datetime if needed
+            if not pd.api.types.is_datetime64_any_dtype(data['timestamp']):
+                data['timestamp'] = pd.to_datetime(data['timestamp'])
+            
+            # Set index and extract feature
+            historical_data = data.set_index('timestamp')[feature]
+            
+            # Create forecast timestamps (daily intervals from last timestamp)
+            if isinstance(last_timestamp, str):
+                last_timestamp = pd.to_datetime(last_timestamp)
+                
+            forecast_idx = pd.date_range(
+                start=last_timestamp,
+                periods=len(forecast) + 1,
+                freq='D'
+            )[1:]  # Skip first as it's the last historical timestamp
+        except Exception as inner_e:
+            raise ValueError(f"Data format error: {str(inner_e)}")
         
-        # Create forecast timestamps (daily intervals from last timestamp)
     except Exception as e:
-        fig = go.Figure()
         fig.add_annotation(
             text=f"Error processing time series data: {str(e)}",
             xref="paper", yref="paper",
@@ -143,13 +168,6 @@ def plot_metrics_over_time(data, time_series_model_dict):
         )
         fig.update_layout(title="Time Series Processing Error")
         return fig
-        
-    # Create forecast timestamps (daily intervals from last timestamp)
-    forecast_idx = pd.date_range(
-        start=last_timestamp,
-        periods=len(forecast) + 1,
-        freq='D'
-    )[1:]  # Skip first as it's the last historical timestamp
     
     # Create a plotly figure
     fig = go.Figure()

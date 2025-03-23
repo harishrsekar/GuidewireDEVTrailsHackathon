@@ -638,6 +638,10 @@ elif page == "Prediction":
 
                             # Create tabs for different visualization options
                             tab1, tab2, tab3 = st.tabs(["Summary View", "Detailed View", "Performance Metrics"])
+                            
+                            # Initialize session state for tab selection if needed
+                            if 'selected_tab' not in st.session_state:
+                                st.session_state.selected_tab = 0  # Default to Summary View
 
                             with tab1:
                                 st.markdown("### Prediction Summary")
@@ -836,28 +840,39 @@ elif page == "Prediction":
                                             # Assign colors based on threshold
                                             colors = ['green' if val >= threshold else 'red' for val in chart_data[selected_metric]]
                                             
-                                            fig, ax = plt.subplots(figsize=(10, 5))
-                                            bars = ax.barh(chart_data['Model'], chart_data[selected_metric], color=colors)
+                                            # Create a plotly figure for better interactivity
+                                            fig = px.bar(
+                                                chart_data,
+                                                x=selected_metric, 
+                                                y='Model',
+                                                orientation='h',
+                                                color=selected_metric,
+                                                color_continuous_scale=['red', 'yellow', 'green'],
+                                                range_color=[0, 1],
+                                                labels={selected_metric: selected_metric, 'Model': 'Model'},
+                                                title=f'{selected_metric} Comparison Across Models',
+                                                text=chart_data[selected_metric].apply(lambda x: f'{x:.4f}')
+                                            )
                                             
-                                            # Add a line for the threshold
-                                            ax.axvline(x=threshold, color='black', linestyle='--', alpha=0.7)
-                                            ax.text(threshold, ax.get_ylim()[1]*0.9, f'Threshold: {threshold:.2f}', 
-                                                    verticalalignment='top', horizontalalignment='center',
-                                                    bbox=dict(facecolor='white', alpha=0.8))
+                                            # Add a vertical line for the threshold
+                                            fig.add_vline(x=threshold, line_dash="dash", line_color="black",
+                                                        annotation_text=f"Threshold: {threshold:.2f}", 
+                                                        annotation_position="top right")
                                             
-                                            # Add values at the end of each bar
-                                            for i, bar in enumerate(bars):
-                                                ax.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2, 
-                                                        f'{chart_data[selected_metric].iloc[i]:.4f}',
-                                                        va='center')
+                                            # Improve layout
+                                            fig.update_layout(
+                                                height=400,
+                                                xaxis_range=[0, 1.1],
+                                                xaxis_title=selected_metric,
+                                                yaxis_title='Model',
+                                                showlegend=False
+                                            )
                                             
-                                            plt.title(f'{selected_metric} Comparison Across Models')
-                                            plt.xlabel(selected_metric)
-                                            plt.ylabel('Model')
-                                            plt.xlim(0, 1.1)  # Set x-axis from 0 to slightly above 1
-                                            plt.tight_layout()
+                                            # Format text display
+                                            fig.update_traces(textposition='outside')
                                             
-                                            st.pyplot(fig)
+                                            # Display the interactive Plotly chart
+                                            st.plotly_chart(fig)
                                             
                                             # Add an explanation about comparing metrics
                                             with st.expander("About Metric Comparison"):
