@@ -483,6 +483,32 @@ elif page == "Model Evaluation":
                         model
                     )
                     st.plotly_chart(fig)
+                    
+                    # Calculate time series model metrics
+                    from model_evaluator import evaluate_time_series_model
+                    from visualizer import create_time_series_performance_matrix
+                    
+                    # Extract historical data and predictions
+                    feature = model.get('feature')
+                    forecast = model.get('forecast')
+                    
+                    if feature and forecast is not None and not isinstance(forecast, type(None)):
+                        # Get actual values from recent history (for evaluation)
+                        historical_data = st.session_state.data[feature].values
+                        # Use a portion of historical data for testing (last n points)
+                        n_test = min(len(forecast), len(historical_data) // 3)
+                        if n_test > 0:
+                            test_actual = historical_data[-n_test:]
+                            # Use forecast from model_dict or make a new prediction if needed
+                            test_pred = model.get('forecasted_history', forecast.iloc[:n_test].values if hasattr(forecast, 'iloc') else forecast[:n_test])
+                            
+                            # Calculate performance metrics
+                            ts_metrics = evaluate_time_series_model(test_actual, test_pred, model.get('model_info'))
+                            
+                            # Display performance matrix
+                            st.subheader("Time Series Model Performance Matrix")
+                            perf_fig = create_time_series_performance_matrix(ts_metrics, model_name=f"{feature} ARIMA Model")
+                            st.plotly_chart(perf_fig)
 
         # Compare models if multiple models are trained
         if len(st.session_state.evaluation_results) > 1:

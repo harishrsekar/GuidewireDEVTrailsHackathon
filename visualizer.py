@@ -290,3 +290,124 @@ def plot_anomaly_detection(X_test, predictions, n_components=2):
     )
     
     return fig
+
+
+def create_time_series_performance_matrix(metrics, model_name="ARIMA Time Series Model"):
+    """
+    Create a visual performance matrix for time series forecasting models.
+    
+    Parameters:
+    -----------
+    metrics : dict
+        Dictionary of time series performance metrics
+    model_name : str
+        Name of the model to display in the matrix
+    
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Interactive performance matrix visualization
+    """
+    if metrics is None or not metrics.get('metrics_available', False):
+        # Return an empty figure with error message
+        fig = go.Figure()
+        fig.update_layout(
+            title="Time Series Performance Matrix",
+            annotations=[
+                dict(
+                    text="No metrics available for time series model",
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5
+                )
+            ],
+            height=400,
+            width=700
+        )
+        return fig
+    
+    # Extract metrics for display, handling potential missing metrics
+    metric_names = [
+        'RMSE', 'MAE', 'MAPE (%)', 'R²', 'Direction Accuracy (%)'
+    ]
+    
+    metric_values = [
+        round(metrics.get('rmse', float('nan')), 3),
+        round(metrics.get('mae', float('nan')), 3),
+        round(metrics.get('mape', float('nan')), 1),
+        round(metrics.get('r2', float('nan')), 3),
+        round(metrics.get('direction_accuracy', float('nan')) * 100, 1)
+    ]
+    
+    # Create a color scale based on typical good/bad values for each metric
+    # Lower is better for error metrics (RMSE, MAE, MAPE)
+    # Higher is better for fit metrics (R², Direction Accuracy)
+    
+    # Normalize metric values to a 0-1 scale for coloring
+    # Use inverted scale for error metrics (lower is better)
+    # These are placeholder values for normalization and should be adjusted
+    # based on domain knowledge and data characteristics
+    max_vals = [10, 10, 50, 1, 100]  # Maximum expected values
+    min_vals = [0, 0, 0, -1, 0]      # Minimum expected values
+    
+    # Calculate normalized values (0-1 scale)
+    normalized_values = []
+    for i, val in enumerate(metric_values):
+        if np.isnan(val):
+            normalized_values.append(0.5)  # Middle value for missing metrics
+            continue
+            
+        # For error metrics (first 3), lower is better, so invert
+        if i < 3:  # RMSE, MAE, MAPE
+            norm_val = 1 - max(0, min(1, (val - min_vals[i]) / (max_vals[i] - min_vals[i])))
+        else:  # R², Direction Accuracy
+            norm_val = max(0, min(1, (val - min_vals[i]) / (max_vals[i] - min_vals[i])))
+            
+        normalized_values.append(norm_val)
+    
+    # Create heatmap
+    fig = go.Figure(data=go.Heatmap(
+        z=[normalized_values],
+        x=metric_names,
+        y=[model_name],
+        colorscale='RdYlGn',  # Red (bad) to Green (good)
+        showscale=False,
+        text=[[str(val) for val in metric_values]],
+        texttemplate="%{text}",
+        textfont={"size": 16}
+    ))
+    
+    # Add any warnings as annotations
+    annotations = []
+    for key, value in metrics.items():
+        if key.startswith('warning'):
+            annotations.append(
+                dict(
+                    text=value,
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=-0.15,
+                    font=dict(size=10, color="red")
+                )
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title={
+            'text': 'Time Series Forecasting Performance Matrix',
+            'y': 0.95,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        height=250,
+        width=700,
+        annotations=annotations,
+        margin=dict(l=50, r=50, t=80, b=80)
+    )
+    
+    return fig
