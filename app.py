@@ -792,21 +792,59 @@ elif page == "Prediction":
                                         Where: TP = True Positives, TN = True Negatives, FP = False Positives, FN = False Negatives
                                         """)
                                     
-                                    # Add confusion matrix visualization if applicable
-                                    if ('random_forest' in st.session_state.models and 
-                                        'random_forest' in st.session_state.evaluation_results and 
-                                        'confusion_matrix' in st.session_state.evaluation_results['random_forest']):
-                                        
-                                        st.subheader("Confusion Matrix")
-                                        cm = st.session_state.evaluation_results['random_forest']['confusion_matrix']
-                                        
-                                        # Create a figure with the confusion matrix
-                                        from visualizer import plot_confusion_matrix
-                                        cm_fig = plot_confusion_matrix(
-                                            st.session_state.y_test, 
-                                            st.session_state.models['random_forest'].predict(st.session_state.X_test)
+                                    # Add confusion matrix visualization for any available model
+                                    st.subheader("Confusion Matrix")
+                                    
+                                    # Allow user to select which model's confusion matrix to view
+                                    models_with_cm = []
+                                    
+                                    # Check which models have confusion matrices available
+                                    for model_name in st.session_state.models:
+                                        if (model_name in st.session_state.evaluation_results and 
+                                            'confusion_matrix' in st.session_state.evaluation_results[model_name] and
+                                            model_name != 'time_series'):  # Exclude time series model
+                                            models_with_cm.append(model_name)
+                                    
+                                    if models_with_cm:
+                                        selected_model = st.selectbox(
+                                            "Select model for confusion matrix visualization",
+                                            options=models_with_cm,
+                                            format_func=lambda x: x.replace('_', ' ').title()
                                         )
+                                        
+                                        # Display the confusion matrix for the selected model
+                                        from visualizer import plot_confusion_matrix
+                                        
+                                        # Use the stored confusion matrix from evaluation results
+                                        cm = st.session_state.evaluation_results[selected_model]['confusion_matrix']
+                                        
+                                        # Display information about the confusion matrix
+                                        st.markdown("""
+                                        **What This Shows:**
+                                        - **Bottom Right:** True Positives - Correctly predicted failures
+                                        - **Bottom Left:** False Negatives - Failures missed by the model
+                                        - **Top Right:** False Positives - False alarms
+                                        - **Top Left:** True Negatives - Correctly predicted normal operation
+                                        """)
+                                        
+                                        # Plot using the stored confusion matrix
+                                        cm_fig = plot_confusion_matrix(None, None, cm=cm)
                                         st.pyplot(cm_fig)
+                                        
+                                        # Add explanation of confusion matrix
+                                        with st.expander("Understanding Confusion Matrix"):
+                                            st.markdown("""
+                                            **Confusion Matrix Explained:**
+                                            
+                                            - **True Negative (Top-Left)**: Normal instances correctly predicted as normal
+                                            - **False Positive (Top-Right)**: Normal instances incorrectly predicted as failures
+                                            - **False Negative (Bottom-Left)**: Failure instances incorrectly predicted as normal
+                                            - **True Positive (Bottom-Right)**: Failure instances correctly predicted as failures
+                                            
+                                            This visualization helps identify which types of errors the model tends to make.
+                                            """)
+                                    else:
+                                        st.info("No confusion matrix data available. Complete model evaluation to see confusion matrix.")
                                         
                                 else:
                                     st.info("No performance metrics available. Complete model evaluation to see metrics.")

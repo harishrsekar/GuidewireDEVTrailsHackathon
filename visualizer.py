@@ -40,7 +40,7 @@ def plot_feature_importance(feature_importance_df, top_n=10):
     
     return plt.gcf()
 
-def plot_confusion_matrix(y_true, y_pred):
+def plot_confusion_matrix(y_true, y_pred, cm=None):
     """
     Plot confusion matrix for classification results.
     
@@ -50,6 +50,8 @@ def plot_confusion_matrix(y_true, y_pred):
         True labels
     y_pred : array-like
         Predicted labels
+    cm : array-like or None
+        Pre-calculated confusion matrix (if available)
     
     Returns:
     --------
@@ -58,16 +60,33 @@ def plot_confusion_matrix(y_true, y_pred):
     """
     plt.figure(figsize=(8, 6))
     
-    # Calculate confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+    # Calculate confusion matrix if not provided
+    if cm is None:
+        cm = confusion_matrix(y_true, y_pred)
+    elif isinstance(cm, list):
+        # Convert list to numpy array if needed
+        cm = np.array(cm)
     
-    # Plot with seaborn
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+    # Get a nice colormap with higher contrast
+    cmap = plt.cm.Blues
+    
+    # Plot with seaborn for a nicer visualization
+    sns.heatmap(cm, annot=True, fmt='d', cmap=cmap,
                 xticklabels=['Normal', 'Failure'],
-                yticklabels=['Normal', 'Failure'])
-    plt.title('Confusion Matrix')
-    plt.ylabel('True Label')
-    plt.xlabel('Predicted Label')
+                yticklabels=['Normal', 'Failure'],
+                cbar=True, square=True, linewidths=0.5)
+    
+    plt.title('Confusion Matrix', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    
+    # Add percentages
+    height, width = cm.shape
+    for i in range(height):
+        for j in range(width):
+            plt.text(j + 0.5, i + 0.7, f'({cm[i, j]/np.sum(cm):.1%})', 
+                    horizontalalignment='center', color='black', fontsize=9)
+    
     plt.tight_layout()
     
     return plt.gcf()
