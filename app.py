@@ -568,8 +568,76 @@ elif page == "Prediction":
                         }
 
                         for model_name, model in st.session_state.models.items():
-                            if model_name != 'time_series':  # Skip time series model for single input
-                                try:
+                            try:
+                                if model_name == 'time_series':
+                                    # Handle time series model differently as it doesn't use the same input format
+                                    ts_model_dict = model  # The time series model is actually a dictionary
+                                    
+                                    # Check if we have an error in the time series model
+                                    if 'error' in ts_model_dict:
+                                        prediction_data = {
+                                            'model_type': model_name,
+                                            'prediction_time': pd.Timestamp.now().isoformat(),
+                                            'error': ts_model_dict['error']
+                                        }
+                                        results['predictions'][model_name] = format_prediction_result(
+                                            model_name,
+                                            prediction_data,
+                                            error=ts_model_dict['error']
+                                        )
+                                        continue
+                                    
+                                    # Get the forecast from the model
+                                    feature = ts_model_dict.get('feature')
+                                    fitted_model = ts_model_dict.get('model')
+                                    
+                                    if fitted_model and feature:
+                                        # Make a forecast for the next 5 periods
+                                        forecast = fitted_model.forecast(steps=5)
+                                        
+                                        # Determine if there's a trend indicating potential failure
+                                        trend_increasing = forecast.mean() > fitted_model.fittedvalues.mean()
+                                        last_value = forecast.iloc[-1]
+                                        
+                                        # Simple threshold-based prediction
+                                        threshold = fitted_model.fittedvalues.mean() * 1.5
+                                        prediction = 'Failure' if last_value > threshold else 'Normal'
+                                        
+                                        prediction_data = {
+                                            'model_type': model_name,
+                                            'prediction_time': pd.Timestamp.now().isoformat(),
+                                            'prediction': prediction,
+                                            'forecast': forecast.tolist(),  # Convert to list for JSON serialization
+                                            'feature': feature,
+                                            'trend_direction': 'Increasing' if trend_increasing else 'Decreasing',
+                                            'forecast_mean': float(forecast.mean()),
+                                            'historical_mean': float(fitted_model.fittedvalues.mean()),
+                                            'threshold': float(threshold)
+                                        }
+                                        
+                                        # Get performance metrics from the time series model
+                                        if 'training_metrics' in ts_model_dict:
+                                            performance_metrics = {
+                                                'mse': ts_model_dict['training_metrics'].get('mse', 0),
+                                                'mae': ts_model_dict['training_metrics'].get('mae', 0),
+                                                'residual_std': ts_model_dict['training_metrics'].get('residual_std', 0)
+                                            }
+                                        else:
+                                            performance_metrics = None
+                                            
+                                        results['predictions'][model_name] = format_prediction_result(
+                                            model_name,
+                                            prediction_data,
+                                            performance_metrics=performance_metrics
+                                        )
+                                    else:
+                                        results['predictions'][model_name] = format_prediction_result(
+                                            model_name,
+                                            {},
+                                            error="Missing required components in time series model"
+                                        )
+                                else:
+                                    # Handle regular ML models
                                     if model_name == 'random_forest':
                                         pred_proba = model.predict_proba(input_df)[0][1]
                                         prediction = model.predict(input_df)[0]
@@ -612,18 +680,18 @@ elif page == "Prediction":
                                         performance_metrics=performance_metrics
                                     )
 
-                                except Exception as e:
-                                    import traceback
-                                    error_details = {
-                                        'error_message': str(e),
-                                        'traceback': traceback.format_exc(),
-                                        'error_type': type(e).__name__
-                                    }
-                                    results['predictions'][model_name] = format_prediction_result(
-                                        model_name, 
-                                        prediction_data={},
-                                        error=str(e)
-                                    )
+                            except Exception as e:
+                                import traceback
+                                error_details = {
+                                    'error_message': str(e),
+                                    'traceback': traceback.format_exc(),
+                                    'error_type': type(e).__name__
+                                }
+                                results['predictions'][model_name] = format_prediction_result(
+                                    model_name, 
+                                    prediction_data={},
+                                    error=str(e)
+                                )
 
                         # Display results
                         st.markdown("---")
@@ -716,6 +784,55 @@ elif page == "Prediction":
                                                 st.metric("Anomaly Score", 
                                                          result['anomaly_score_formatted'],
                                                          help=f"Severity: {result['severity']}")
+                                            
+                                            # Handle time series specific metrics
+                                            if model_name == 'time_series' and 'forecast' in result:
+                                                st.metric("Forecast Trend",
+                                                         result.get('trend_direction', 'N/A'),
+                                                         help=f"Feature: {result.get('feature', 'unknown')}")
+                                                
+                                                # Create a time series plot if we have forecast data
+                                                if 'forecast' in result and result['forecast']:
+                                                    import plotly.graph_objects as go
+                                                    
+                                                    # Create date range for forecast
+                                                    import pandas as pd
+                                                    from datetime import datetime, timedelta
+                                                    
+                                                    now = datetime.now()
+                                                    dates = [now + timedelta(days=i) for i in range(len(result['forecast']))]
+                                                    
+                                                    # Create the plot
+                                                    fig = go.Figure()
+                                                    
+                                                    # Add forecast line
+                                                    fig.add_trace(go.Scatter(
+                                                        x=dates,
+                                                        y=result['forecast'],
+                                                        mode='lines',
+                                                        name='Forecast',
+                                                        line=dict(color='blue')
+                                                    ))
+                                                    
+                                                    # Add threshold line
+                                                    if 'threshold' in result:
+                                                        fig.add_trace(go.Scatter(
+                                                            x=[dates[0], dates[-1]],
+                                                            y=[result['threshold'], result['threshold']],
+                                                            mode='lines',
+                                                            name='Failure Threshold',
+                                                            line=dict(color='red', dash='dash')
+                                                        ))
+                                                        
+                                                    # Update layout
+                                                    fig.update_layout(
+                                                        title=f"Time Series Forecast for {result.get('feature', 'Feature')}",
+                                                        xaxis_title="Date",
+                                                        yaxis_title=result.get('feature', 'Value'),
+                                                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                                                    )
+                                                    
+                                                    st.plotly_chart(fig)
                             
                             with tab2:
                                 # Show raw JSON data in an expandable container
@@ -774,6 +891,19 @@ elif page == "Prediction":
                                             if 'auc' in eval_results:
                                                 row['AUC'] = f"{eval_results['auc']:.4f}"
                                             perf_data.append(row)
+                                
+                                # Add time series metrics if available
+                                if 'time_series' in st.session_state.models:
+                                    ts_model = st.session_state.models['time_series']
+                                    if 'training_metrics' in ts_model and not any(row.get('Model') == 'Time Series' for row in perf_data):
+                                        metrics = ts_model['training_metrics']
+                                        row = {
+                                            'Model': 'Time Series',
+                                            'MAE': f"{metrics.get('mae', 0):.4f}",
+                                            'MSE': f"{metrics.get('mse', 0):.4f}",
+                                            'Residual STD': f"{metrics.get('residual_std', 0):.4f}"
+                                        }
+                                        perf_data.append(row)
                                 
                                 # Display performance metrics table
                                 if perf_data:
@@ -1012,8 +1142,82 @@ elif page == "Prediction":
                                     }
 
                                     for model_name, model in st.session_state.models.items():
-                                        if model_name != 'time_series':  # Skip time series model for batch
-                                            try:
+                                        try:
+                                            if model_name == 'time_series':
+                                                # Handle time series model specially for batch processing
+                                                ts_model_dict = model  # The time series model is a dictionary
+                                                
+                                                # Check if we have an error in the time series model
+                                                if 'error' in ts_model_dict:
+                                                    prediction_data = {
+                                                        'model_type': model_name,
+                                                        'prediction_time': pd.Timestamp.now().isoformat(),
+                                                        'error': ts_model_dict['error']
+                                                    }
+                                                    results['predictions'][model_name] = format_prediction_result(
+                                                        model_name,
+                                                        prediction_data,
+                                                        error=ts_model_dict['error']
+                                                    )
+                                                    continue
+                                                
+                                                # Get the forecast and model components
+                                                feature = ts_model_dict.get('feature')
+                                                fitted_model = ts_model_dict.get('model')
+                                                
+                                                if fitted_model and feature:
+                                                    # For batch, we'll forecast for the next 10 periods
+                                                    forecast = fitted_model.forecast(steps=10)
+                                                    
+                                                    # Analyze trends
+                                                    trend_increasing = forecast.mean() > fitted_model.fittedvalues.mean()
+                                                    threshold = fitted_model.fittedvalues.mean() * 1.5
+                                                    
+                                                    # Determine if the forecast indicates a potential failure
+                                                    failure_points = (forecast > threshold).sum()
+                                                    trend_severity = 'High' if failure_points > len(forecast) * 0.6 else \
+                                                                    'Medium' if failure_points > len(forecast) * 0.3 else 'Low'
+                                                    
+                                                    prediction = 'Failure' if failure_points > len(forecast) * 0.3 else 'Normal'
+                                                    
+                                                    prediction_data = {
+                                                        'model_type': model_name,
+                                                        'prediction_time': pd.Timestamp.now().isoformat(),
+                                                        'prediction': prediction,
+                                                        'forecast': forecast.tolist(),  # Convert to list for JSON serialization
+                                                        'feature': feature,
+                                                        'trend_direction': 'Increasing' if trend_increasing else 'Decreasing',
+                                                        'trend_severity': trend_severity,
+                                                        'failure_points': int(failure_points),
+                                                        'total_forecast_points': len(forecast),
+                                                        'forecast_mean': float(forecast.mean()),
+                                                        'historical_mean': float(fitted_model.fittedvalues.mean()),
+                                                        'threshold': float(threshold)
+                                                    }
+                                                    
+                                                    # Get performance metrics
+                                                    if 'training_metrics' in ts_model_dict:
+                                                        performance_metrics = {
+                                                            'mse': ts_model_dict['training_metrics'].get('mse', 0),
+                                                            'mae': ts_model_dict['training_metrics'].get('mae', 0),
+                                                            'residual_std': ts_model_dict['training_metrics'].get('residual_std', 0)
+                                                        }
+                                                    else:
+                                                        performance_metrics = None
+                                                        
+                                                    results['predictions'][model_name] = format_prediction_result(
+                                                        model_name,
+                                                        prediction_data,
+                                                        performance_metrics=performance_metrics
+                                                    )
+                                                else:
+                                                    results['predictions'][model_name] = format_prediction_result(
+                                                        model_name,
+                                                        {},
+                                                        error="Missing required components in time series model"
+                                                    )
+                                            else:
+                                                # Handle regular ML models
                                                 if model_name == 'random_forest':
                                                     predictions = model.predict(test_data_processed)
                                                     probabilities = model.predict_proba(test_data_processed)[:, 1]
@@ -1065,19 +1269,19 @@ elif page == "Prediction":
                                                     performance_metrics=performance_metrics
                                                 )
                                                 
-                                            except Exception as e:
-                                                import traceback
-                                                error_details = {
-                                                    'error_message': str(e),
-                                                    'traceback': traceback.format_exc(),
-                                                    'error_type': type(e).__name__
-                                                }
-                                                results['predictions'][model_name] = format_prediction_result(
-                                                    model_name, 
-                                                    prediction_data={},
-                                                    error=str(e)
-                                                )
-                                                st.error(f"Error with {model_name}: {e}")
+                                        except Exception as e:
+                                            import traceback
+                                            error_details = {
+                                                'error_message': str(e),
+                                                'traceback': traceback.format_exc(),
+                                                'error_type': type(e).__name__
+                                            }
+                                            results['predictions'][model_name] = format_prediction_result(
+                                                model_name, 
+                                                prediction_data={},
+                                                error=str(e)
+                                            )
+                                            st.error(f"Error with {model_name}: {e}")
 
                                     # Display results
                                     st.subheader("Batch Prediction Results")
