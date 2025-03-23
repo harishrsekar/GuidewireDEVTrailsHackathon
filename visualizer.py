@@ -128,9 +128,9 @@ def plot_metrics_over_time(data, time_series_model_dict):
         
         if not all([model, forecast, feature, last_timestamp]):
             raise KeyError("Missing required time series model components")
-    
-    # Prepare the data
-    historical_data = data.set_index('timestamp')[feature]
+            
+        # Prepare the data
+        historical_data = data.set_index('timestamp')[feature]
     
     # Create forecast timestamps (daily intervals from last timestamp)
     forecast_idx = pd.date_range(
