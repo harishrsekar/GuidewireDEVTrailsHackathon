@@ -128,7 +128,9 @@ def plot_metrics_over_time(data, time_series_model_dict):
         feature = time_series_model_dict.get('feature')
         last_timestamp = time_series_model_dict.get('last_timestamp')
         
-        if not all([model, forecast, feature, last_timestamp]):
+        # Properly check for missing components, avoiding Series truth value evaluation
+        if (model is None or forecast is None or feature is None or last_timestamp is None or 
+            (isinstance(forecast, pd.Series) and forecast.empty)):
             raise KeyError("Missing required time series model components")
             
         # Validate data format
@@ -191,30 +193,40 @@ def plot_metrics_over_time(data, time_series_model_dict):
     ))
     
     # Add confidence intervals if available
-    if hasattr(forecast, 'conf_int'):
-        conf_int = forecast.conf_int()
-        lower = conf_int.iloc[:, 0]
-        upper = conf_int.iloc[:, 1]
+    if hasattr(forecast, 'conf_int') and callable(getattr(forecast, 'conf_int')):
+        try:
+            conf_int = forecast.conf_int()
+            if not conf_int.empty and conf_int.shape[1] >= 2:
+                lower = conf_int.iloc[:, 0]
+                upper = conf_int.iloc[:, 1]
+            else:
+                # Skip confidence intervals if the data is not properly formatted
+                lower = upper = None
+        except Exception:
+            # Skip confidence intervals on error
+            lower = upper = None
         
-        fig.add_trace(go.Scatter(
-            x=forecast_idx,
-            y=upper,
-            mode='lines',
-            name='Upper CI',
-            line=dict(width=0),
-            showlegend=False
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=forecast_idx,
-            y=lower,
-            mode='lines',
-            name='Lower CI',
-            fill='tonexty',
-            fillcolor='rgba(255, 0, 0, 0.1)',
-            line=dict(width=0),
-            showlegend=False
-        ))
+        # Only add confidence interval traces if both lower and upper are valid
+        if lower is not None and upper is not None:
+            fig.add_trace(go.Scatter(
+                x=forecast_idx,
+                y=upper,
+                mode='lines',
+                name='Upper CI',
+                line=dict(width=0),
+                showlegend=False
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=forecast_idx,
+                y=lower,
+                mode='lines',
+                name='Lower CI',
+                fill='tonexty',
+                fillcolor='rgba(255, 0, 0, 0.1)',
+                line=dict(width=0),
+                showlegend=False
+            ))
     
     # Update layout
     fig.update_layout(
