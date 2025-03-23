@@ -593,10 +593,23 @@ elif page == "Prediction":
                                             'severity': 'High' if abs(anomaly_score) > 0.75 else 'Medium' if abs(anomaly_score) > 0.5 else 'Low'
                                         }
                                         
+                                    # Get performance metrics from evaluation if available
+                                    performance_metrics = None
+                                    if model_name in st.session_state.evaluation_results:
+                                        eval_results = st.session_state.evaluation_results[model_name]
+                                        performance_metrics = {
+                                            'accuracy': eval_results.get('accuracy', 0),
+                                            'precision': eval_results.get('precision', 0),
+                                            'recall': eval_results.get('recall', 0),
+                                            'f1': eval_results.get('f1', 0),
+                                            'auc': eval_results.get('auc', 0) if 'auc' in eval_results else None
+                                        }
+                                    
                                     # Use the utility function to format the results consistently
                                     results['predictions'][model_name] = format_prediction_result(
                                         model_name, 
-                                        prediction_data
+                                        prediction_data,
+                                        performance_metrics=performance_metrics
                                     )
 
                                 except Exception as e:
@@ -643,12 +656,24 @@ elif page == "Prediction":
                                             'Status': '✅ Success',
                                             'Prediction': result['prediction']
                                         }
+                                        
+                                        # Add model-specific metrics
                                         if 'probability_formatted' in result:
                                             row['Probability'] = result['probability_formatted']
                                             row['Confidence'] = result['confidence_level']
                                         if 'anomaly_score_formatted' in result:
                                             row['Anomaly Score'] = result['anomaly_score_formatted']
                                             row['Severity'] = result['severity']
+                                            
+                                        # Add performance metrics if available
+                                        if 'performance_metrics' in result and result['performance_metrics']:
+                                            metrics = result['performance_metrics']
+                                            row['Accuracy'] = f"{metrics['accuracy']:.2%}"
+                                            row['Precision'] = f"{metrics['precision']:.2%}"
+                                            row['Recall'] = f"{metrics['recall']:.2%}"
+                                            row['F1 Score'] = f"{metrics['f1']:.2%}"
+                                            if metrics['auc'] is not None:
+                                                row['AUC'] = f"{metrics['auc']:.2%}"
                                     table_data.append(row)
                                 
                                 # Display the summary table
@@ -663,8 +688,25 @@ elif page == "Prediction":
                                                 results_df.at[idx, 'Model Accuracy'] = f"{st.session_state.evaluation_results[model_name]['accuracy']:.2%}"
                                     
                                     # Reorder columns to show important info first
-                                    cols = ['Model', 'Status', 'Prediction', 'Model Accuracy']
+                                    # First the key columns
+                                    cols = ['Model', 'Status', 'Prediction']
+                                    
+                                    # Then performance metrics in a logical order
+                                    perf_cols = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC', 'Model Accuracy']
+                                    for col in perf_cols:
+                                        if col in results_df.columns:
+                                            cols.append(col)
+                                    
+                                    # Then prediction details
+                                    pred_cols = ['Probability', 'Confidence', 'Anomaly Score', 'Severity']
+                                    for col in pred_cols:
+                                        if col in results_df.columns:
+                                            cols.append(col)
+                                    
+                                    # Add any remaining columns
                                     cols.extend([col for col in results_df.columns if col not in cols])
+                                    
+                                    # Apply the column ordering
                                     results_df = results_df[cols]
                                     
                                     st.table(results_df)  # Using st.table for fixed-width display
@@ -817,10 +859,23 @@ elif page == "Prediction":
                                                         }
                                                     }
                                                 
+                                                # Get performance metrics from evaluation if available
+                                                performance_metrics = None
+                                                if model_name in st.session_state.evaluation_results:
+                                                    eval_results = st.session_state.evaluation_results[model_name]
+                                                    performance_metrics = {
+                                                        'accuracy': eval_results.get('accuracy', 0),
+                                                        'precision': eval_results.get('precision', 0),
+                                                        'recall': eval_results.get('recall', 0),
+                                                        'f1': eval_results.get('f1', 0),
+                                                        'auc': eval_results.get('auc', 0) if 'auc' in eval_results else None
+                                                    }
+                                                
                                                 # Use the utility function to format the results consistently
                                                 results['predictions'][model_name] = format_prediction_result(
                                                     model_name, 
-                                                    prediction_data
+                                                    prediction_data,
+                                                    performance_metrics=performance_metrics
                                                 )
                                                 
                                             except Exception as e:

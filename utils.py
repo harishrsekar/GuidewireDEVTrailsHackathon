@@ -142,7 +142,7 @@ def calculate_metrics_summary(predictions, actual=None):
     
     return summary
 
-def format_prediction_result(model_name, prediction_data, error=None):
+def format_prediction_result(model_name, prediction_data, error=None, performance_metrics=None):
     """
     Create a standardized prediction result object for consistent UI display.
     
@@ -154,6 +154,8 @@ def format_prediction_result(model_name, prediction_data, error=None):
         Raw prediction data from the model
     error : str or None
         Error message if prediction failed
+    performance_metrics : dict or None
+        Model performance metrics from evaluation
     
     Returns:
     --------
@@ -168,9 +170,14 @@ def format_prediction_result(model_name, prediction_data, error=None):
     
     if error:
         result['error'] = str(error)
+        result['error_message'] = str(error)  # Added for compatibility with UI
         result['prediction'] = None
     else:
         result.update(prediction_data)
+        
+        # Include performance metrics if available
+        if performance_metrics:
+            result['performance_metrics'] = performance_metrics
     
     return result
 
