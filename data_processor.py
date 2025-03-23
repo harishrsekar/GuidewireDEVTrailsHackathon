@@ -7,7 +7,7 @@ from imblearn.under_sampling import RandomUnderSampler
 
 def preprocess_data(data):
     """
-    Preprocess the Kubernetes metrics data.
+    Preprocess the Kubernetes metrics data with robust handling for outliers and extreme values.
     
     Parameters:
     -----------
@@ -25,66 +25,131 @@ def preprocess_data(data):
     df = data.copy()
     
     # Metadata to store preprocessing info
-    metadata = {}
+    metadata = {
+        'original_shape': df.shape,
+        'columns_processed': [],
+        'outliers_detected': {}
+    }
     
-    # Handle infinite values first
-    numeric_cols = df.select_dtypes(include=['number']).columns
-    for col in numeric_cols:
-        # Replace inf and -inf with NaN so they can be handled in the missing values step
-        df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+    try:
+        
+        # Step 1: Handle infinite values and extreme outliers
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        metadata['numeric_columns'] = list(numeric_cols)
+        
+        for col in numeric_cols:
+            # Replace inf and -inf with NaN
+            inf_count = np.sum(np.isinf(df[col].values))
+            if inf_count > 0:
+                metadata['outliers_detected'][col] = {'infinity_values': int(inf_count)}
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+            
+            # Handle extreme outliers using winsorization (capping)
+            non_null_values = df[col].dropna()
+            if len(non_null_values) > 0:
+                # Use robust quantiles for capping
+                q_low = non_null_values.quantile(0.01)
+                q_high = non_null_values.quantile(0.99)
+                
+                # Calculate interquartile range (IQR)
+                q25 = non_null_values.quantile(0.25)
+                q75 = non_null_values.quantile(0.75)
+                iqr = q75 - q25
+                
+                # Identify extreme outliers (more than 3 IQRs from quartiles)
+                lower_bound = q25 - (3 * iqr)
+                upper_bound = q75 + (3 * iqr)
+                
+                outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
+                outlier_count = outlier_mask.sum()
+                
+                if outlier_count > 0:
+                    metadata['outliers_detected'][col] = metadata['outliers_detected'].get(col, {})
+                    metadata['outliers_detected'][col]['extreme_outliers'] = int(outlier_count)
+                    metadata['outliers_detected'][col]['lower_bound'] = float(lower_bound)
+                    metadata['outliers_detected'][col]['upper_bound'] = float(upper_bound)
+                    
+                    # Cap values to reduce impact of extreme outliers
+                    df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
+            
+            metadata['columns_processed'].append(col)
+        
+        # Step 2: Count missing values after handling infinities and outliers
+        missing_counts = df.isnull().sum()
+        metadata['missing_values'] = missing_counts.to_dict()
+        
+        # Step 3: For numeric columns, fill NaNs with median (more robust than mean)
+        for col in numeric_cols:
+            if df[col].isnull().sum() > 0:
+                median_val = df[col].median()
+                # If median is NaN (all values are NaN), use 0
+                if pd.isna(median_val):
+                    median_val = 0
+                df[col] = df[col].fillna(median_val)
+        
+        # Step 4: For categorical columns, fill NaNs with mode
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns
+        metadata['categorical_columns'] = list(categorical_cols)
+        
+        for col in categorical_cols:
+            if df[col].isnull().sum() > 0:
+                # Get mode or use a default value if no mode exists
+                if len(df[col].mode()) > 0:
+                    df[col] = df[col].fillna(df[col].mode()[0])
+                else:
+                    df[col] = df[col].fillna("unknown")
+            
+            metadata['columns_processed'].append(col)
     
-    # Count missing values after replacing infinities
-    missing_counts = df.isnull().sum()
-    metadata['missing_values'] = missing_counts.to_dict()
-    
-    # For numeric columns, fill NaNs with median
-    for col in numeric_cols:
-        if df[col].isnull().sum() > 0:
-            median_val = df[col].median()
-            # If median is NaN (all values are NaN), use 0
-            if pd.isna(median_val):
-                median_val = 0
-            df[col] = df[col].fillna(median_val)
-    
-    # For categorical columns, fill NaNs with mode
-    categorical_cols = df.select_dtypes(include=['object', 'category']).columns
-    for col in categorical_cols:
-        if df[col].isnull().sum() > 0:
-            # Get mode or use a default value if no mode exists
-            if len(df[col].mode()) > 0:
-                df[col] = df[col].fillna(df[col].mode()[0])
-            else:
-                df[col] = df[col].fillna("unknown")
-    
-    # Convert timestamp to datetime if it exists
-    if 'timestamp' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        metadata['timestamp_converted'] = True
-    
-    # Encode categorical variables if any (except 'node' which we'll keep as-is for reference)
-    categorical_cols = [col for col in categorical_cols if col != 'node' and col != 'timestamp']
-    for col in categorical_cols:
-        df = pd.get_dummies(df, columns=[col], drop_first=True)
-    
-    # Drop any non-numeric columns that aren't needed for modeling
-    # except 'timestamp' which we keep for time-series analysis
-    cols_to_drop = [col for col in df.columns if not pd.api.types.is_numeric_dtype(df[col]) 
-                  and col != 'timestamp' and col != 'failure']
-    
-    if cols_to_drop:
-        metadata['dropped_columns'] = cols_to_drop
-        df = df.drop(columns=cols_to_drop)
-    
-    # Ensure 'failure' is binary (0 or 1)
-    if 'failure' in df.columns:
-        df['failure'] = df['failure'].astype(int)
-    
-    # Check for any remaining infinities
-    for col in df.select_dtypes(include=['number']).columns:
-        # Replace any remaining inf with large values
-        df[col] = df[col].replace([np.inf, -np.inf], [1e6, -1e6])
-    
-    return df, metadata
+        # Convert timestamp to datetime if it exists
+        if 'timestamp' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            metadata['timestamp_converted'] = True
+        
+        # Encode categorical variables if any (except 'node' which we'll keep as-is for reference)
+        categorical_cols = [col for col in categorical_cols if col != 'node' and col != 'timestamp']
+        for col in categorical_cols:
+            df = pd.get_dummies(df, columns=[col], drop_first=True)
+        
+        # Drop any non-numeric columns that aren't needed for modeling
+        # except 'timestamp' which we keep for time-series analysis
+        cols_to_drop = [col for col in df.columns if not pd.api.types.is_numeric_dtype(df[col]) 
+                      and col != 'timestamp' and col != 'failure']
+        
+        if cols_to_drop:
+            metadata['dropped_columns'] = cols_to_drop
+            df = df.drop(columns=cols_to_drop)
+        
+        # Ensure 'failure' is binary (0 or 1)
+        if 'failure' in df.columns:
+            df['failure'] = df['failure'].astype(int)
+        
+        # Check for any remaining infinities
+        for col in df.select_dtypes(include=['number']).columns:
+            # Replace any remaining inf with large values
+            df[col] = df[col].replace([np.inf, -np.inf], [1e6, -1e6])
+        
+        return df, metadata
+        
+    except Exception as e:
+        print(f"Error during preprocessing: {e}")
+        # In case of error, perform basic cleaning and return
+        basic_df = data.copy()
+        
+        # Handle infinite values and NaNs in numeric columns 
+        for col in basic_df.select_dtypes(include=['number']).columns:
+            # Replace inf with large finite values
+            basic_df[col] = basic_df[col].replace([np.inf, -np.inf], [1e6, -1e6])
+            # Replace NaN with 0
+            basic_df[col] = basic_df[col].fillna(0)
+            
+        # Create minimal metadata
+        basic_metadata = {
+            'preprocessing_error': str(e),
+            'basic_cleaning_applied': True
+        }
+        
+        return basic_df, basic_metadata
 
 def apply_feature_engineering(data, window_sizes=[5, 10], apply_pca=False, n_components=None):
     """
@@ -269,9 +334,9 @@ def handle_class_imbalance(X, y, method='SMOTE'):
         print(f"Class imbalance handling failed: {e}")
         return X_copy, y
 
-def apply_scaling(X_train, X_test, method='StandardScaler'):
+def apply_scaling(X_train, X_test, method='RobustScaler'):
     """
-    Apply scaling to the features.
+    Apply scaling to the features with enhanced handling for outliers and extreme values.
     
     Parameters:
     -----------
@@ -281,6 +346,7 @@ def apply_scaling(X_train, X_test, method='StandardScaler'):
         Testing feature matrix
     method : str
         Scaling method ('StandardScaler', 'RobustScaler', 'MinMaxScaler')
+        RobustScaler is recommended for data with outliers
     
     Returns:
     --------
@@ -291,47 +357,75 @@ def apply_scaling(X_train, X_test, method='StandardScaler'):
     scaler
         Fitted scaler object
     """
-    # Create copies to avoid modifying the original data
-    X_train_copy = X_train.copy()
-    X_test_copy = X_test.copy()
-    
-    # Handle any remaining infinity or very large values
-    X_train_copy = X_train_copy.replace([np.inf, -np.inf], np.nan)
-    X_test_copy = X_test_copy.replace([np.inf, -np.inf], np.nan)
-    
-    # Fill NaN values with column means
-    for col in X_train_copy.columns:
-        col_mean = X_train_copy[col].mean()
-        # If the mean is NaN (all values in column are NaN), use 0 instead
-        if pd.isna(col_mean):
-            col_mean = 0
+    try:
+        # Create copies to avoid modifying the original data
+        X_train_copy = X_train.copy()
+        X_test_copy = X_test.copy()
         
-        X_train_copy[col] = X_train_copy[col].fillna(col_mean)
-        X_test_copy[col] = X_test_copy[col].fillna(col_mean)
-    
-    # Select the appropriate scaler
-    if method == 'StandardScaler':
-        scaler = StandardScaler()
-    elif method == 'RobustScaler':
-        scaler = RobustScaler()
-    elif method == 'MinMaxScaler':
-        scaler = MinMaxScaler()
-    else:
-        # Default to StandardScaler
-        scaler = StandardScaler()
-    
-    # Fit on training data
-    X_train_scaled = pd.DataFrame(
-        scaler.fit_transform(X_train_copy),
-        columns=X_train_copy.columns,
-        index=X_train_copy.index
-    )
-    
-    # Transform test data
-    X_test_scaled = pd.DataFrame(
-        scaler.transform(X_test_copy),
-        columns=X_test_copy.columns,
-        index=X_test_copy.index
-    )
-    
-    return X_train_scaled, X_test_scaled, scaler
+        # Step 1: Replace infinity values with NaN
+        X_train_copy = X_train_copy.replace([np.inf, -np.inf], np.nan)
+        X_test_copy = X_test_copy.replace([np.inf, -np.inf], np.nan)
+        
+        # Step 2: Handle extremely large values by capping (winsorizing)
+        for col in X_train_copy.columns:
+            # Get column data excluding NaNs
+            col_data = X_train_copy[col].dropna()
+            
+            if not col_data.empty:
+                # Calculate quantiles for capping
+                q_low = col_data.quantile(0.01)
+                q_high = col_data.quantile(0.99)
+                
+                # Cap extreme values in both training and test sets
+                X_train_copy[col] = X_train_copy[col].clip(lower=q_low, upper=q_high)
+                X_test_copy[col] = X_test_copy[col].clip(lower=q_low, upper=q_high)
+        
+        # Step 3: Fill remaining NaN values with median (more robust than mean)
+        for col in X_train_copy.columns:
+            col_median = X_train_copy[col].median()
+            # If the median is NaN (all values in column are NaN), use 0 instead
+            if pd.isna(col_median):
+                col_median = 0
+            
+            X_train_copy[col] = X_train_copy[col].fillna(col_median)
+            X_test_copy[col] = X_test_copy[col].fillna(col_median)
+        
+        # Step 4: Select the appropriate scaler
+        if method == 'StandardScaler':
+            scaler = StandardScaler()
+        elif method == 'RobustScaler':
+            scaler = RobustScaler() # Better for data with outliers
+        elif method == 'MinMaxScaler':
+            scaler = MinMaxScaler()
+        else:
+            # Default to RobustScaler for better handling of outliers
+            scaler = RobustScaler()
+        
+        # Step 5: Do a final check for any remaining problematic values
+        # This ensures no infinity or NaN values remain before scaling
+        X_train_clean = np.nan_to_num(X_train_copy.values, nan=0.0, posinf=0.0, neginf=0.0)
+        X_test_clean = np.nan_to_num(X_test_copy.values, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # Step 6: Apply scaling
+        X_train_scaled_array = scaler.fit_transform(X_train_clean)
+        X_test_scaled_array = scaler.transform(X_test_clean)
+        
+        # Step 7: Convert back to DataFrame
+        X_train_scaled = pd.DataFrame(
+            X_train_scaled_array,
+            columns=X_train_copy.columns,
+            index=X_train_copy.index
+        )
+        
+        X_test_scaled = pd.DataFrame(
+            X_test_scaled_array,
+            columns=X_test_copy.columns,
+            index=X_test_copy.index
+        )
+        
+        return X_train_scaled, X_test_scaled, scaler
+        
+    except Exception as e:
+        print(f"Error during scaling: {e}")
+        # Return unscaled data if scaling fails
+        return X_train, X_test, None
