@@ -97,53 +97,66 @@ def train_time_series_model(data, feature='cpu_usage_percent'):
     # Prepare time series data
     ts_data = data.sort_values('timestamp')
     
+    # Convert timestamp to datetime if needed
+    if not pd.api.types.is_datetime64_any_dtype(ts_data['timestamp']):
+        ts_data['timestamp'] = pd.to_datetime(ts_data['timestamp'])
+    
     # Set timestamp as index and select only the target feature
     ts_series = ts_data.set_index('timestamp')[feature]
     
-    # Try to find the best ARIMA parameters using auto_arima
+    # Handle missing values and infinity
+    ts_series = ts_series.replace([np.inf, -np.inf], np.nan)
+    
+    # Convert to numeric type to ensure compatibility with ARIMA
+    ts_series = pd.to_numeric(ts_series, errors='coerce')
+    
+    # Drop NaN values
+    ts_series = ts_series.dropna()
+    
+    # If there's not enough data, raise an error
+    if len(ts_series) < 3:
+        return {
+            'error': f"Not enough valid data points to train time series model for {feature}",
+            'feature': feature
+        }
+    
+    # Use simple default parameters
+    p, d, q = 1, 1, 0
+    
     try:
-        # Import pmdarima if available
-        from pmdarima import auto_arima
+        # Train ARIMA model with simple parameters
+        model = ARIMA(ts_series, order=(p, d, q))
+        fitted_model = model.fit()
         
-        # Find the best parameters
-        auto_model = auto_arima(
-            ts_series,
-            start_p=1, start_q=1,
-            max_p=3, max_q=3,
-            m=1,  # No seasonality
-            d=None,  # Let auto_arima determine the differencing
-            seasonal=False,
-            trace=False,
-            error_action='ignore',
-            suppress_warnings=True,
-            stepwise=True
-        )
+        # Forecast for the next 10 periods
+        forecast_periods = 10
+        forecast = fitted_model.forecast(steps=forecast_periods)
         
-        # Extract the best parameters
-        p, d, q = auto_model.order
+        # Calculate metrics
+        training_metrics = {
+            'mse': ((fitted_model.resid) ** 2).mean(),
+            'mae': abs(fitted_model.resid).mean(),
+            'residual_std': fitted_model.resid.std()
+        }
         
-    except ImportError:
-        # If pmdarima is not available, use default parameters
-        p, d, q = 1, 1, 1
-    
-    # Train ARIMA model
-    model = ARIMA(ts_series, order=(p, d, q))
-    fitted_model = model.fit()
-    
-    # Forecast for the next 10 periods
-    forecast_periods = 10
-    forecast = fitted_model.forecast(steps=forecast_periods)
-    
-    # Prepare result
-    result = {
-        'model': fitted_model,
-        'forecast': forecast,
-        'feature': feature,
-        'last_timestamp': ts_series.index[-1],
-        'order': (p, d, q)
-    }
-    
-    return result
+        # Prepare result
+        result = {
+            'model': fitted_model,
+            'forecast': forecast,
+            'feature': feature,
+            'last_timestamp': ts_series.index[-1],
+            'order': (p, d, q),
+            'training_metrics': training_metrics,
+            'training_data': ts_series
+        }
+        
+        return result
+    except Exception as e:
+        # If ARIMA fails, return error information
+        return {
+            'error': str(e),
+            'feature': feature
+        }
 
 def train_arima_model(time_series, order=(5, 1, 0)):
     """

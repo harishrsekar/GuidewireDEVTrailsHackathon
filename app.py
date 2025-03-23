@@ -284,11 +284,96 @@ elif page == "Model Evaluation":
                     
                     # Display evaluation metrics
                     st.subheader("Evaluation Metrics")
-                    metrics_df = pd.DataFrame({
-                        'Metric': list(evaluation_results.keys()),
-                        'Value': list(evaluation_results.values())
-                    })
-                    st.dataframe(metrics_df)
+                    
+                    # Extract only numeric metrics for display
+                    display_metrics = {}
+                    for key, value in evaluation_results.items():
+                        if key in ['accuracy', 'precision', 'recall', 'f1', 'auc']:
+                            display_metrics[key] = value
+                    
+                    # Create a more user-friendly metrics display with color-coded performance indicators
+                    st.write("### Key Performance Metrics")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        accuracy = display_metrics.get('accuracy', 0)
+                        st.metric("Accuracy", f"{accuracy:.4f}", 
+                                 delta=f"{(accuracy-0.5):.2f} vs random" if accuracy > 0 else None)
+                        
+                        precision = display_metrics.get('precision', 0)
+                        st.metric("Precision", f"{precision:.4f}")
+                        
+                        recall = display_metrics.get('recall', 0)
+                        st.metric("Recall (Sensitivity)", f"{recall:.4f}")
+                    
+                    with col2:
+                        f1 = display_metrics.get('f1', 0)
+                        st.metric("F1 Score", f"{f1:.4f}")
+                        
+                        if 'auc' in display_metrics:
+                            auc = display_metrics.get('auc', 0)
+                            st.metric("AUC-ROC", f"{auc:.4f}", 
+                                    delta=f"{(auc-0.5):.2f} vs random" if auc > 0.5 else None)
+                        
+                        # Calculate specificity if available in the report
+                        if 'classification_report' in evaluation_results:
+                            try:
+                                report = evaluation_results['classification_report']
+                                if '0' in report:  # Class 0 exists in report
+                                    specificity = report['0']['recall']
+                                    st.metric("Specificity", f"{specificity:.4f}")
+                            except:
+                                pass
+                    
+                    # Display detailed classification report
+                    if 'classification_report' in evaluation_results:
+                        with st.expander("View Detailed Classification Report"):
+                            try:
+                                report = evaluation_results['classification_report']
+                                # Convert the classification report dict to a DataFrame
+                                report_df = pd.DataFrame(report).T
+                                # Filter out unnecessary rows
+                                if 'accuracy' in report_df.index:
+                                    report_df = report_df.drop(['accuracy'])
+                                # Rename index
+                                report_df.index.name = 'Class'
+                                report_df = report_df.rename(index={'0': 'Normal (0)', '1': 'Failure (1)'})
+                                # Display the report
+                                st.dataframe(report_df.style.format("{:.4f}"))
+                                
+                                # Add interpretation
+                                st.markdown("""
+                                **Interpretation Guide:**
+                                - **Precision**: Percentage of correctly identified failures among all predictions.
+                                - **Recall**: Percentage of actual failures correctly identified (also called sensitivity).
+                                - **F1-score**: Harmonic mean of precision and recall (balance between the two).
+                                - **Support**: Number of samples in each class.
+                                """)
+                            except Exception as e:
+                                st.error(f"Error displaying classification report: {e}")
+                    
+                    # Display additional metrics in a dataframe
+                    with st.expander("View All Performance Metrics"):
+                        # Filter out array metrics and already displayed metrics
+                        scalar_metrics = {}
+                        exclude_keys = ['fpr', 'tpr', 'predictions', 'probabilities', 'anomaly_scores', 
+                                      'classification_report', 'accuracy', 'precision', 'recall', 'f1', 'auc']
+                        
+                        for key, value in evaluation_results.items():
+                            if key not in exclude_keys:
+                                try:
+                                    # Check if value is scalar or convertible to scalar
+                                    float(value)
+                                    scalar_metrics[key] = value
+                                except (TypeError, ValueError):
+                                    pass
+                        
+                        if scalar_metrics:
+                            metrics_df = pd.DataFrame({
+                                'Metric': list(scalar_metrics.keys()),
+                                'Value': list(scalar_metrics.values())
+                            })
+                            st.dataframe(metrics_df)
                     
                     # Plot confusion matrix
                     if model_to_evaluate == 'random_forest':
@@ -451,8 +536,29 @@ elif page == "Prediction":
                         
                         # Display results
                         st.subheader("Prediction Results")
+                        
+                        # First show a summary of all results
+                        summary_data = []
                         for model_name, result in results.items():
-                            with st.expander(f"{model_name.replace('_', ' ').title()} Prediction"):
+                            if 'error' not in result and 'prediction' in result:
+                                row = {
+                                    'Model': model_name.replace('_', ' ').title(),
+                                    'Prediction': result['prediction']
+                                }
+                                if 'probability' in result:
+                                    row['Probability'] = result['probability']
+                                if 'anomaly_score' in result:
+                                    row['Anomaly Score'] = result['anomaly_score']
+                                summary_data.append(row)
+                        
+                        # Show summary table if we have results
+                        if summary_data:
+                            summary_df = pd.DataFrame(summary_data)
+                            st.dataframe(summary_df)
+                        
+                        # Show detailed results per model
+                        for model_name, result in results.items():
+                            with st.expander(f"{model_name.replace('_', ' ').title()} Prediction Details"):
                                 if 'error' in result:
                                     st.error(f"Error: {result['error']}")
                                 else:
@@ -460,15 +566,26 @@ elif page == "Prediction":
                                         prediction = result['prediction']
                                         is_failure = prediction in ['Failure', 'Anomaly']
                                         
-                                        if is_failure:
-                                            st.error(f"Prediction: {prediction}")
-                                        else:
-                                            st.success(f"Prediction: {prediction}")
+                                        # Create columns for better layout
+                                        col1, col2 = st.columns(2)
                                         
-                                        if 'probability' in result:
-                                            st.write(f"Probability: {result['probability']}")
-                                        if 'anomaly_score' in result:
-                                            st.write(f"Anomaly Score: {result['anomaly_score']}")
+                                        with col1:
+                                            if is_failure:
+                                                st.error(f"Prediction: {prediction}")
+                                            else:
+                                                st.success(f"Prediction: {prediction}")
+                                        
+                                        with col2:
+                                            if 'probability' in result:
+                                                st.metric("Failure Probability", result['probability'])
+                                            if 'anomaly_score' in result:
+                                                st.metric("Anomaly Score", result['anomaly_score'])
+                                        
+                                        # Add more context to the prediction
+                                        if is_failure:
+                                            st.warning("Potential cluster issue detected! Recommendation: Review system resources and logs for irregularities.")
+                                        else:
+                                            st.info("Cluster appears to be operating normally based on the current metrics.")
                 else:
                     st.error("No trained models available. Please complete the model training step first.")
         
@@ -528,8 +645,44 @@ elif page == "Prediction":
                                     # Display results
                                     st.subheader("Batch Prediction Results")
                                     
+                                    # First show a summary of all model results
+                                    summary_metrics = {}
+                                    
                                     for model_name, result in results.items():
-                                        with st.expander(f"{model_name.replace('_', ' ').title()} Predictions"):
+                                        if 'predictions' in result:
+                                            failure_count = int(sum(result['predictions']))
+                                            total_count = len(result['predictions'])
+                                            failure_percentage = (failure_count / total_count) * 100
+                                            
+                                            summary_metrics[model_name] = {
+                                                'Total Samples': total_count,
+                                                'Predicted Failures': failure_count,
+                                                'Failure Rate': f"{failure_percentage:.2f}%"
+                                            }
+                                    
+                                    if summary_metrics:
+                                        # Convert to DataFrame for display
+                                        summary_df = pd.DataFrame(summary_metrics).T
+                                        summary_df.index.name = 'Model'
+                                        summary_df = summary_df.reset_index()
+                                        
+                                        # Display summary metrics
+                                        st.write("### Prediction Summary")
+                                        st.dataframe(summary_df)
+                                        
+                                        # Create a bar chart comparing failure rates
+                                        fig = px.bar(
+                                            summary_df, 
+                                            x='Model', 
+                                            y='Predicted Failures',
+                                            title='Predicted Failures by Model',
+                                            color='Model'
+                                        )
+                                        st.plotly_chart(fig)
+                                    
+                                    # Show detailed results for each model
+                                    for model_name, result in results.items():
+                                        with st.expander(f"{model_name.replace('_', ' ').title()} Detailed Predictions"):
                                             if 'predictions' in result:
                                                 # Add predictions to a copy of the original data
                                                 result_df = test_data.copy()
@@ -540,14 +693,22 @@ elif page == "Prediction":
                                                 if 'scores' in result:
                                                     result_df[f'{model_name}_anomaly_score'] = result['scores']
                                                 
+                                                # Display the dataframe with predictions
                                                 st.dataframe(result_df)
                                                 
-                                                # Calculate summary statistics
+                                                # Calculate and display metrics
                                                 failure_count = sum(result['predictions'])
                                                 total_count = len(result['predictions'])
                                                 failure_percentage = (failure_count / total_count) * 100
                                                 
-                                                st.write(f"Predicted failures: {failure_count} out of {total_count} ({failure_percentage:.2f}%)")
+                                                # Show metrics in a more visual way
+                                                col1, col2, col3 = st.columns(3)
+                                                with col1:
+                                                    st.metric("Total Samples", total_count)
+                                                with col2:
+                                                    st.metric("Predicted Failures", int(failure_count))
+                                                with col3:
+                                                    st.metric("Failure Rate", f"{failure_percentage:.2f}%")
                                                 
                                                 # Plot predictions distribution
                                                 fig = px.histogram(
