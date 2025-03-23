@@ -71,7 +71,7 @@ The ARIMA (AutoRegressive Integrated Moving Average) model is used for forecasti
 2. Forecasts future values based on historical patterns
 3. Helps identify potential deviations that could indicate upcoming failures
 
-<img src="https://github.com/user-attachments/assets/6b2086c8-4ce1-4655-9383-3a3d6f6eef06" width="500">
+<img src="https://github.com/user-attachments/assets/6b2086c8-4ce1-4655-9383-3a3d6f6eef06" width="700">
 
 ## Performance Metrics
 
