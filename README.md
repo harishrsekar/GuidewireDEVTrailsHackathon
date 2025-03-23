@@ -84,14 +84,14 @@ The application provides comprehensive performance metrics for each model:
 - F1 Score: Harmonic mean of precision and recall
 - AUC-ROC: Area under the Receiver Operating Characteristic curve
 
-<img src="https://github.com/user-attachments/assets/341e8b9a-c69d-4b62-9d40-a4ffe849565a" width="500">
+<img src="https://github.com/user-attachments/assets/341e8b9a-c69d-4b62-9d40-a4ffe849565a" width="800">
 
 ### Anomaly Detection Metrics (Isolation Forest)
 - Anomaly Score Distribution
 - Precision and Recall at various thresholds
 - F1 Score optimization for threshold selection
 
-<img src="https://github.com/user-attachments/assets/67d225ed-a23e-41b6-a10c-bdba976b666c" width="500">
+<img src="https://github.com/user-attachments/assets/67d225ed-a23e-41b6-a10c-bdba976b666c" width="800">
 
 ### Time Series Metrics (ARIMA)
 - RMSE (Root Mean Square Error)
@@ -100,7 +100,7 @@ The application provides comprehensive performance metrics for each model:
 - R² (Coefficient of Determination)
 - Direction Accuracy
 
-<img src="https://github.com/user-attachments/assets/b8811bae-6163-46e7-8ea8-252dfe03dfbb" width="500">
+<img src="https://github.com/user-attachments/assets/b8811bae-6163-46e7-8ea8-252dfe03dfbb" width="800">
 
 ## Data Processing Pipeline
 
