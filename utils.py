@@ -165,7 +165,8 @@ def format_prediction_result(model_name, prediction_data, error=None, performanc
     result = {
         'model': model_name.replace('_', ' ').title(),
         'timestamp': datetime.now().isoformat(),
-        'status': 'error' if error else 'success'
+        'status': 'error' if error else 'success',
+        'model_type': model_name
     }
     
     if error:
@@ -173,12 +174,22 @@ def format_prediction_result(model_name, prediction_data, error=None, performanc
         result['error_message'] = str(error)  # Added for compatibility with UI
         result['prediction'] = None
     else:
+        # Ensure there's always a prediction key for consistent UI display
+        if 'prediction' not in prediction_data:
+            if model_name == 'random_forest':
+                result['prediction'] = 'Failure' if prediction_data.get('predictions', [0])[0] == 1 else 'Normal'
+            elif model_name == 'isolation_forest':
+                result['prediction'] = 'Anomaly' if prediction_data.get('predictions', [0])[0] == 1 else 'Normal'
+            else:
+                result['prediction'] = 'Unknown'
+        
+        # Update with prediction data
         result.update(prediction_data)
         
         # Include performance metrics if available
         if performance_metrics:
             result['performance_metrics'] = performance_metrics
-    
+            
     return result
 
 def handle_prediction_errors(func):

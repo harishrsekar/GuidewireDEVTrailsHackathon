@@ -648,7 +648,7 @@ elif page == "Prediction":
                                         row = {
                                             'Model': model_name.replace('_', ' ').title(),
                                             'Status': '❌ Error',
-                                            'Details': result['error_message']
+                                            'Details': result.get('error_message', result.get('error', 'Unknown error'))
                                         }
                                     else:
                                         row = {
