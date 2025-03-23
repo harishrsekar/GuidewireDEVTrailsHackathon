@@ -779,18 +779,15 @@ elif page == "Prediction":
                                                 if model_name == 'random_forest':
                                                     predictions = model.predict(test_data_processed)
                                                     probabilities = model.predict_proba(test_data_processed)[:, 1]
-
                                                     results[model_name] = {
                                                         'predictions': predictions,
                                                         'probabilities': probabilities
                                                     }
-                                                elifmodel_name == 'isolation_forest':
+                                                elif model_name == 'isolation_forest':
                                                     predictions = model.predict(test_data_processed)
                                                     scores = model.score_samples(test_data_processed)
-
                                                     # Convert -1/1 to 1/0 (anomaly/normal)
                                                     predictions = np.where(predictions == -1, 1, 0)
-
                                                     results[model_name] = {
                                                         'predictions': predictions,
                                                         'scores': scores
