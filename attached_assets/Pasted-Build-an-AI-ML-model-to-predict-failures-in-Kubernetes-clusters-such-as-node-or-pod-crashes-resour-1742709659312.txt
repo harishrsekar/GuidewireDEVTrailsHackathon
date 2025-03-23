@@ -1,0 +1,64 @@
+Build an AI/ML model to predict failures in Kubernetes clusters, such as node or pod crashes, resource exhaustion (CPU, memory, disk), network connectivity issues, and service disruptions. The model should leverage historical and real-time cluster metrics to forecast potential failures.
+
+Data Collection:
+
+Use publicly available datasets or simulate cluster metrics (CPU usage, memory usage, pod status, network I/O).
+
+Preprocess the data to handle missing values, outliers, and normalization.
+
+Model Design:
+
+Experiment with various algorithms, including:
+
+Random Forest for general classification.
+
+Anomaly detection using Isolation Forest or Autoencoders.
+
+Time-series analysis with LSTM or ARIMA.
+
+Train multiple models and select the best based on accuracy and stability.
+
+Model Evaluation:
+
+Use metrics such as accuracy, precision, recall, and F1-score.
+
+Validate the model on a separate test set to assess performance.
+
+Deployment (Optional):
+
+Package the solution using Kubernetes (K8s) to run the model with minimal dependencies.
+
+Prompt to Improve the Dataset:
+
+Improve the Kubernetes crash dataset to enhance model generalization and reduce overfitting. Apply the following enhancements:
+
+Feature Engineering:
+
+Create a binary "failure" label based on common crash patterns (e.g., high CPU, memory, or frequent restarts).
+
+Aggregate metrics over sliding windows to capture temporal patterns and trends.
+
+Generate new features based on statistical aggregations (e.g., mean, standard deviation) for each metric.
+
+Data Balancing:
+
+Address class imbalance using techniques like SMOTE (Synthetic Minority Over-sampling Technique) or undersampling majority classes.
+
+Outlier Handling:
+
+Apply RobustScaler to minimize the impact of extreme values and improve model robustness.
+
+Reducing Multicollinearity:
+
+Identify highly correlated features using a correlation matrix and drop redundant ones.
+
+Dimensionality Reduction:
+
+Use Principal Component Analysis (PCA) or Recursive Feature Elimination (RFE) to reduce the dimensionality of the feature space.
+
+Validation and Splitting:
+
+Split data into training, validation, and testing sets to monitor model performance and reduce overfitting.
+
+Implement cross-validation to ensure the model's generalization capability.
+
