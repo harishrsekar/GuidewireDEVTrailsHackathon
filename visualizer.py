@@ -131,32 +131,13 @@ def plot_metrics_over_time(data, time_series_model_dict):
             
         # Prepare the data
         historical_data = data.set_index('timestamp')[feature]
-        
-        except Exception as e:
-        fig = go.Figure()
-        fig.add_annotation(
-            text=f"Error processing time series data: {str(e)}",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            showarrow=False
-        )
-        fig.update_layout(title="Time Series Processing Error")
-        return fig
-
-    try:
-        # Ensure forecast is a pandas Series or convert it
-        if not isinstance(forecast, pd.Series):
-            forecast = pd.Series(forecast)
-            
-        # Create forecast timestamps (daily intervals from last timestamp)
-        forecast_idx = pd.date_range(
-            start=last_timestamp,
-            periods=len(forecast),
-            freq='D'
-        )
-        
-        # Assign index to forecast
-        forecast.index = forecast_idx
+    
+    # Create forecast timestamps (daily intervals from last timestamp)
+    forecast_idx = pd.date_range(
+        start=last_timestamp,
+        periods=len(forecast) + 1,
+        freq='D'
+    )[1:]  # Skip first as it's the last historical timestamp
     
     # Create a plotly figure
     fig = go.Figure()
